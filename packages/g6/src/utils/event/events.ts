@@ -2,7 +2,7 @@ import type { IAnimation } from '@antv/g';
 import type { ID } from '@antv/graphlib';
 import type { AnimationType, GraphEvent } from '../../constants';
 import type { GraphData } from '../../spec';
-import type { DataChange, State, TransformOptions } from '../../types';
+import type { State, TransformOptions } from '../../types';
 export class BaseEvent {
   constructor(public type: string) {}
 }
@@ -18,8 +18,7 @@ export class GraphLifeCycleEvent extends BaseEvent {
       | GraphEvent.AFTER_LAYOUT
       | GraphEvent.BEFORE_SIZE_CHANGE
       | GraphEvent.AFTER_SIZE_CHANGE,
-    public data?: DataChange[],
-    public animation?: boolean,
+    public data?: any,
   ) {
     super(type);
   }
