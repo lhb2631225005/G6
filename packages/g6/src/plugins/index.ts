@@ -1,6 +1,7 @@
 export { BasePlugin } from './base-plugin';
 export { Contextmenu } from './contextmenu';
 export { GridLine } from './grid-line';
+export { History } from './history';
 export { Toolbar } from './toolbar';
 export { Tooltip } from './tooltip';
 export { Watermark } from './watermark';

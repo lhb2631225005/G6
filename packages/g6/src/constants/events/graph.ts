@@ -51,6 +51,10 @@ export const enum GraphEvent {
   BEFORE_ELEMENT_STATE_CHANGE = 'beforeelementstatechange',
   /** <zh/> 状态变化之后 | <en/> After the state changes */
   AFTER_ELEMENT_STATE_CHANGE = 'afterelementstatechange',
+  /** <zh/> 批处理开始 | <en/> Batch processing starts */
+  BATCH_START = 'batchstart',
+  /** <zh/> 批处理结束 | <en/> Batch processing ends */
+  BATCH_END = 'batchend',
 }
 
 export const enum AnimationTypeEnum {

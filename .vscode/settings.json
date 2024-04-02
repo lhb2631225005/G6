@@ -16,6 +16,8 @@
     "aftertransform",
     "afterviewportanimate",
     "antv",
+    "batchend",
+    "batchstart",
     "bbox",
     "beforeanimate",
     "beforedraw",

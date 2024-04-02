@@ -43,6 +43,7 @@ import { idOf } from '../utils/id';
 import { parsePoint, toPointObject } from '../utils/point';
 import { zIndexOf } from '../utils/style';
 import { subtract } from '../utils/vector';
+import { BatchController } from './batch';
 import { BehaviorController } from './behavior';
 import { Canvas } from './canvas';
 import type { HierarchyKey } from './data';
@@ -446,6 +447,7 @@ export class Graph extends EventEmitter {
     if (!this.context.element) this.context.element = new ElementController(this.context);
     if (!this.context.layout) this.context.layout = new LayoutController(this.context);
     if (!this.context.behavior) this.context.behavior = new BehaviorController(this.context);
+    if (!this.context.batch) this.context.batch = new BatchController(this.context);
   }
 
   private async prepare(): Promise<void> {
