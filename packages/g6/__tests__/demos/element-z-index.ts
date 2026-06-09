@@ -1,4 +1,4 @@
-import { Graph } from '@/src';
+import { Graph } from '@antv/g6';
 
 export const elementZIndex: TestCase = async (context) => {
   const graph = new Graph({
@@ -16,8 +16,8 @@ export const elementZIndex: TestCase = async (context) => {
       ],
       combos: [
         { id: 'combo-1', style: { x: 50, y: 250 } },
-        { id: 'combo-2', style: { x: 50, y: 250, parentId: 'combo-1' } },
-        { id: 'combo-3', style: { x: 150, y: 250, parentId: 'combo-2' } },
+        { id: 'combo-2', combo: 'combo-1', style: { x: 50, y: 250 } },
+        { id: 'combo-3', combo: 'combo-2', style: { x: 150, y: 250 } },
         { id: 'combo-4', style: { x: 350, y: 250 } },
       ],
     },
@@ -26,14 +26,15 @@ export const elementZIndex: TestCase = async (context) => {
         size: 40,
         labelText: (d) => d.id,
         labelWordWrapWidth: 200,
-        color: (d, index) => ['red', 'green', 'blue'][index],
       },
+      palette: 'tableau',
     },
     combo: {
       style: {
         labelText: (d) => d.id,
-        color: (d, index: number) => ['pink', 'cyan', 'purple', 'orange'][index],
+        fillOpacity: 1,
       },
+      palette: 'tableau',
     },
     behaviors: ['drag-element'],
   });

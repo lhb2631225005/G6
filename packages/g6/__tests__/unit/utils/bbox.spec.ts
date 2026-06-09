@@ -5,12 +5,14 @@ import {
   getCombinedBBox,
   getExpandedBBox,
   getIncircleRadius,
-  getNearestPointToPoint,
-  getNearestSideToPoint,
+  getNearestBoundaryPoint,
+  getNearestBoundarySide,
   getNodeBBox,
   getPointBBox,
   getTriangleCenter,
+  isBBoxInside,
   isPointInBBox,
+  isPointOnBBoxBoundary,
   isPointOutsideBBox,
 } from '@/src/utils/bbox';
 import { AABB } from '@antv/g';
@@ -61,6 +63,17 @@ describe('bbox', () => {
     expect(getCombinedBBox([])).toEqual(new AABB());
   });
 
+  it('isBBoxInside', () => {
+    const bbox1 = new AABB();
+    bbox1.setMinMax([0, 0, 0], [1, 1, 1]);
+    const bbox2 = new AABB();
+    bbox2.setMinMax([0.5, 0.5, 0], [1.5, 1.5, 1]);
+    const bbox3 = new AABB();
+    bbox3.setMinMax([0, 0, 0], [2, 2, 2]);
+    expect(isBBoxInside(bbox1, bbox2)).toBe(false);
+    expect(isBBoxInside(bbox1, bbox3)).toBe(true);
+  });
+
   it('isPointInBBox', () => {
     expect(isPointInBBox([0.5, 0.5, 0], bbox)).toBe(true);
     expect(isPointInBBox([0, 0, 0], bbox)).toBe(true);
@@ -73,20 +86,26 @@ describe('bbox', () => {
     expect(isPointOutsideBBox([0.5, 0.5, 0], bbox)).toBe(false);
   });
 
-  it('getNearestSideToPoint', () => {
-    expect(getNearestSideToPoint(bbox, [0.2, 0.5, 0])).toBe('left');
-    expect(getNearestSideToPoint(bbox, [0.5, 0.2, 0])).toBe('top');
-    expect(getNearestSideToPoint(bbox, [0.8, 0.5, 0])).toBe('right');
-    expect(getNearestSideToPoint(bbox, [0.5, 0.8, 0])).toBe('bottom');
+  it('isPointOnBBoxBoundary', () => {
+    expect(isPointOnBBoxBoundary([0, 0.5, 0], bbox)).toEqual(true);
+    expect(isPointOnBBoxBoundary([0, 2, 0], bbox)).toEqual(false);
+    expect(isPointOnBBoxBoundary([0, 2, 0], bbox, true)).toEqual(true);
   });
 
-  it('getNearestPointToPoint', () => {
-    expect(getNearestPointToPoint(bbox, [0.2, 0.5, 0])).toEqual([0, 0.5, 0]);
-    expect(getNearestPointToPoint(bbox, [0.5, 0.2, 0])).toEqual([0.5, 0, 0]);
-    expect(getNearestPointToPoint(bbox, [0.8, 0.5, 0])).toEqual([1, 0.5, 0]);
-    expect(getNearestPointToPoint(bbox, [0.5, 0.8, 0])).toEqual([0.5, 1, 0]);
-    expect(getNearestPointToPoint(bbox, [1.8, 0.5, 0])).toEqual([1, 0.5, 0]);
-    expect(getNearestPointToPoint(bbox, [0.5, 1.8, 0])).toEqual([0.5, 1, 0]);
+  it('getNearestBoundarySide', () => {
+    expect(getNearestBoundarySide([0.2, 0.5, 0], bbox)).toBe('left');
+    expect(getNearestBoundarySide([0.5, 0.2, 0], bbox)).toBe('top');
+    expect(getNearestBoundarySide([0.8, 0.5, 0], bbox)).toBe('right');
+    expect(getNearestBoundarySide([0.5, 0.8, 0], bbox)).toBe('bottom');
+  });
+
+  it('getNearestBoundaryPoint', () => {
+    expect(getNearestBoundaryPoint([0.2, 0.5, 0], bbox)).toEqual([0, 0.5, 0]);
+    expect(getNearestBoundaryPoint([0.5, 0.2, 0], bbox)).toEqual([0.5, 0, 0]);
+    expect(getNearestBoundaryPoint([0.8, 0.5, 0], bbox)).toEqual([1, 0.5, 0]);
+    expect(getNearestBoundaryPoint([0.5, 0.8, 0], bbox)).toEqual([0.5, 1, 0]);
+    expect(getNearestBoundaryPoint([1.8, 0.5, 0], bbox)).toEqual([1, 0.5, 0]);
+    expect(getNearestBoundaryPoint([0.5, 1.8, 0], bbox)).toEqual([0.5, 1, 0]);
   });
 
   it('getTriangleCenter', () => {

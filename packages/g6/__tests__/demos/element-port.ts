@@ -1,5 +1,5 @@
-import { Graph } from '@/src';
 import { idOf } from '@/src/utils/id';
+import { Graph } from '@antv/g6';
 
 export const elementPort: TestCase = async (context) => {
   const graph = new Graph({
@@ -24,8 +24,8 @@ export const elementPort: TestCase = async (context) => {
       ],
     },
     node: {
+      type: (d) => (d.id === 'node-1' ? 'circle' : 'rect'),
       style: {
-        type: (d) => (d.id === 'node-1' ? 'circle' : 'rect'),
         size: (d) => (d.id === 'node-1' ? 30 : [50, 150]),
         port: true,
         ports: (d) =>

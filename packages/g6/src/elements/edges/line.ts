@@ -1,21 +1,28 @@
 import type { DisplayObjectConfig } from '@antv/g';
 import type { PathArray } from '@antv/util';
-import { deepMix } from '@antv/util';
+import { mergeOptions } from '../../utils/style';
 import type { BaseEdgeStyleProps } from './base-edge';
 import { BaseEdge } from './base-edge';
 
-export type LineStyleProps = BaseEdgeStyleProps;
+/**
+ * <zh/> 直线样式配置项
+ *
+ * <en/> Line style properties
+ */
+export interface LineStyleProps extends BaseEdgeStyleProps {}
 
 type ParsedLineStyleProps = Required<LineStyleProps>;
 
 /**
- * Draw line based on BaseEdge, override drawKeyShape
+ * <zh/> 直线
+ *
+ * <en/> Line
  */
 export class Line extends BaseEdge {
   static defaultStyleProps: Partial<LineStyleProps> = {};
 
   constructor(options: DisplayObjectConfig<LineStyleProps>) {
-    super(deepMix({}, { style: Line.defaultStyleProps }, options));
+    super(mergeOptions({ style: Line.defaultStyleProps }, options));
   }
 
   protected getKeyPath(attributes: ParsedLineStyleProps): PathArray {

@@ -1,12 +1,13 @@
-import type { G6Spec, GraphData } from '@antv/g6';
-import { Graph, register } from '@antv/g6';
-import { Light, Line3D, Plane, Sphere, renderer } from '../../src';
+import type { GraphData } from '@antv/g6';
+import { ExtensionCategory, Graph, register } from '@antv/g6';
+import { Light, Line3D, ObserveCanvas3D, Plane, Sphere, renderer } from '../../src';
 
-export const layerTop = async (context: G6Spec) => {
-  register('plugin', '3d-light', Light);
-  register('node', 'sphere', Sphere);
-  register('node', 'plane', Plane);
-  register('edge', 'line3d', Line3D);
+export const layerTop: TestCase = async (context) => {
+  register(ExtensionCategory.PLUGIN, '3d-light', Light);
+  register(ExtensionCategory.NODE, 'sphere', Sphere);
+  register(ExtensionCategory.NODE, 'plane', Plane);
+  register(ExtensionCategory.EDGE, 'line3d', Line3D);
+  register(ExtensionCategory.BEHAVIOR, 'observe-canvas-3d', ObserveCanvas3D);
 
   const result = await fetch('https://assets.antv.antgroup.com/g6/3-layer-top.json');
   const { nodes, edges } = await result.json();
@@ -16,8 +17,8 @@ export const layerTop = async (context: G6Spec) => {
   data.nodes = nodes.map(({ name, pos, layer }: any) => ({
     id: name,
     data: { layer },
+    type: 'sphere',
     style: {
-      type: 'sphere',
       radius: 10,
       color: colors[layer - 1],
       materialType: 'phong',
@@ -28,8 +29,8 @@ export const layerTop = async (context: G6Spec) => {
   new Array(3).fill(0).forEach((_, i) => {
     data.nodes!.push({
       id: `plane-${i + 1}`,
+      type: 'plane',
       style: {
-        type: 'plane',
         size: 1000,
         color: colors[i],
         y: -300 + 300 * i + 10,
@@ -45,17 +46,26 @@ export const layerTop = async (context: G6Spec) => {
   const graph = new Graph({
     ...context,
     renderer,
+    x: 100,
+    y: 100,
     data,
-    node: {
-      style: {},
-    },
+    zoom: 0.4,
     edge: {
+      type: 'line3d',
       style: {
-        type: 'line3d',
         lineWidth: 5,
       },
     },
+    behaviors: ['observe-canvas-3d'],
     plugins: [
+      {
+        type: 'camera-setting',
+        projectionMode: 'perspective',
+        near: 0.1,
+        far: 50000,
+        fov: 45,
+        aspect: 1,
+      },
       {
         type: '3d-light',
         directional: {

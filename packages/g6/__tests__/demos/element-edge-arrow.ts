@@ -1,5 +1,5 @@
-import { Graph } from '@/src';
 import { idOf } from '@/src/utils/id';
+import { Graph } from '@antv/g6';
 
 export const elementEdgeArrow: TestCase = async (context) => {
   const edgeIds = [
@@ -26,14 +26,15 @@ export const elementEdgeArrow: TestCase = async (context) => {
     ...context,
     data,
     edge: {
+      type: 'line', // 👈🏻 Edge shape type.
       style: {
-        type: 'line', // 👈🏻 Edge shape type.
         labelText: (d) => d.id!,
         labelBackground: true,
         endArrow: true,
         endArrowType: (d: any) => idOf(d).toString().split('-')[0] as any,
       },
     },
+    behaviors: ['drag-element'],
     layout: {
       type: 'grid',
       cols: 2,

@@ -1,5 +1,5 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/force.json';
+import { Graph } from '@antv/g6';
 
 export const layoutD3Force: TestCase = async (context) => {
   const graph = new Graph({
@@ -9,7 +9,11 @@ export const layoutD3Force: TestCase = async (context) => {
     autoFit: 'view',
     behaviors: ['zoom-canvas', 'drag-canvas', 'drag-element', 'click-select'],
     layout: {
-      type: 'd3force',
+      type: 'd3-force',
+      nodeSize: (d: { style: { size: number } }) => (d.style.size as number) * 2,
+      collide: {
+        strength: 0.5,
+      },
     },
     node: {
       style: {

@@ -1,23 +1,47 @@
-import type { AABB } from '@antv/g';
-import type { ID } from '@antv/graphlib';
+import type { AABB, DisplayObject, TransformArray } from '@antv/g';
 import type { PathArray } from '@antv/util';
 import { isEqual, isNumber } from '@antv/util';
 import type { EdgeData } from '../spec';
 import type {
+  EdgeBadgeStyleProps,
   EdgeKey,
-  EdgeLabelPlacement,
   EdgeLabelStyleProps,
+  ID,
   LoopPlacement,
   Node,
+  NodeLikeData,
   Point,
   Port,
+  Size,
   Vector2,
 } from '../types';
-import { getBBoxHeight, getBBoxSize, getBBoxWidth, getNearestSideToPoint, getNodeBBox } from './bbox';
+import { getBBoxHeight, getBBoxSize, getBBoxWidth, getNearestBoundarySide, getNodeBBox } from './bbox';
+import { isCollapsed } from './collapsibility';
 import { getAllPorts, getNodeConnectionPoint, getPortConnectionPoint, getPortPosition } from './element';
+import { idOf } from './id';
 import { isCollinear, isHorizontal, moveTo, parsePoint } from './point';
 import { freeJoin } from './router/orth';
 import { add, distance, manhattanDistance, multiply, normalize, perpendicular, subtract } from './vector';
+
+/**
+ * <zh/> 自环边弧顶处的切线角度，每个方向的切线与凸起方向垂直
+ *
+ * <en/> Tangent angles at the apex of loop edges, perpendicular to bulge direction for each placement
+ */
+const LOOP_TANGENT_ANGLES: Record<string, number> = {
+  top: 0,
+  bottom: 0,
+  left: Math.PI / 2,
+  right: Math.PI / 2,
+  'top-right': Math.PI / 4,
+  'right-top': Math.PI / 4,
+  'bottom-left': Math.PI / 4,
+  'left-bottom': Math.PI / 4,
+  'right-bottom': -Math.PI / 4,
+  'bottom-right': -Math.PI / 4,
+  'left-top': -Math.PI / 4,
+  'top-left': -Math.PI / 4,
+};
 
 /**
  * <zh/> 获取标签的位置样式
@@ -28,14 +52,18 @@ import { add, distance, manhattanDistance, multiply, normalize, perpendicular, s
  * @param autoRotate - <zh/> 是否自动旋转 | <en/> Whether to auto-rotate
  * @param offsetX - <zh/> 标签相对于边的水平偏移量 | <en/> Horizontal offset of the label relative to the edge
  * @param offsetY - <zh/> 标签相对于边的垂直偏移量 | <en/> Vertical offset of the label relative to the edge
+ * @param isLoop - <zh/> 是否是自环边 | <en/> Whether it is a loop edge
+ * @param loopPlacement - <zh/> 自环边的位置 | <en/> The loop placement
  * @returns <zh/> 标签的位置样式 | <en/> Returns the style of the label's position
  */
 export function getLabelPositionStyle(
   key: EdgeKey,
-  placement: EdgeLabelPlacement,
+  placement: EdgeLabelStyleProps['placement'],
   autoRotate: boolean,
   offsetX: number,
   offsetY: number,
+  isLoop?: boolean,
+  loopPlacement?: LoopPlacement,
 ): Partial<EdgeLabelStyleProps> {
   const START_RATIO = 0;
   const MIDDLE_RATIO = 0.5;
@@ -45,6 +73,29 @@ export function getLabelPositionStyle(
   if (placement === 'start') ratio = START_RATIO;
   if (placement === 'end') ratio = END_RATIO;
 
+  // 自环边：label 放在弧顶点（ratio=0.5），角度由 loopPlacement 精确计算
+  // Loop edge: place label at apex (ratio=0.5), compute exact angle from loopPlacement
+  // 自环边：label 居中在弧顶（ratio=0.5），旋转角度由 loopPlacement 决定
+  // Loop edge: center label at apex (ratio=0.5), rotation angle determined by loopPlacement
+  if (isLoop && loopPlacement) {
+    ratio = 0.5;
+    // 自环边默认居中在弧顶，清除默认偏移量
+    // Loop edges default to centering at the apex, clear default offsets
+    offsetX = 0;
+    offsetY = 0;
+
+    let angle = LOOP_TANGENT_ANGLES[loopPlacement] ?? 0;
+    // 确保文本从左到右可读 | Ensure text reads left-to-right
+    if (Math.cos(angle) < -1e-6) angle += Math.PI;
+
+    const shouldRotate = autoRotate && angle !== 0;
+    const [x, y] = getXYByPlacement(key, ratio, offsetX, offsetY, shouldRotate ? angle : undefined);
+    const transform: TransformArray = [['translate', x, y]];
+    if (shouldRotate) transform.push(['rotate', (angle / Math.PI) * 180]);
+
+    return { textAlign: 'center' as const, transform };
+  }
+
   const point = parsePoint(key.getPoint(ratio));
   const pointOffset = parsePoint(key.getPoint(ratio + 0.01));
 
@@ -53,7 +104,7 @@ export function getLabelPositionStyle(
 
   if (isHorizontal(point, pointOffset) || !autoRotate) {
     const [x, y] = getXYByPlacement(key, ratio, offsetX, offsetY);
-    return { x, y, textAlign };
+    return { transform: [['translate', x, y]], textAlign };
   }
 
   let angle = Math.atan2(pointOffset[1] - point[1], pointOffset[0] - point[0]);
@@ -66,14 +117,45 @@ export function getLabelPositionStyle(
   }
 
   const [x, y] = getXYByPlacement(key, ratio, offsetX, offsetY, angle);
-  const transform = `rotate(${(angle / Math.PI) * 180}deg)`;
+  const transform: TransformArray = [
+    ['translate', x, y],
+    ['rotate', (angle / Math.PI) * 180],
+  ];
 
   return {
-    x,
-    y,
     textAlign,
     transform,
   };
+}
+
+/**
+ * <zh/> 获取边上徽标的位置样式
+ *
+ * <en/> Get the position style of the badge on the edge
+ * @param shapeMap - <zh/> 边上的图形映射 | <en/> Shape map on the edge
+ * @param placement - <zh/> 徽标位置 | <en/> Badge position
+ * @param labelPlacement - <zh/> 标签位置 | <en/> Label position
+ * @param offsetX - <zh/> 水平偏移量 | <en/> Horizontal offset
+ * @param offsetY - <zh/> 垂直偏移量 | <en/> Vertical offset
+ * @returns <zh/> 徽标的位置样式 | <en/> Position style of the badge
+ */
+export function getBadgePositionStyle(
+  shapeMap: Record<string, DisplayObject<any, any>>,
+  placement: EdgeBadgeStyleProps['placement'],
+  labelPlacement: EdgeLabelStyleProps['placement'],
+  offsetX: number,
+  offsetY: number,
+) {
+  const badgeWidth = shapeMap.badge?.getGeometryBounds().halfExtents[0] * 2 || 0;
+  const labelWidth = shapeMap.label?.getGeometryBounds().halfExtents[0] * 2 || 0;
+
+  return getLabelPositionStyle(
+    shapeMap.key as EdgeKey,
+    labelPlacement,
+    true,
+    (labelWidth ? (labelWidth / 2 + badgeWidth / 2) * (placement === 'suffix' ? 1 : -1) : 0) + offsetX,
+    offsetY,
+  );
 }
 
 /**
@@ -206,9 +288,10 @@ export function getCubicPath(sourcePoint: Point, targetPoint: Point, controlPoin
  * @returns <zh/> 返回绘制折线的路径 | <en/> Returns the path for drawing a polyline
  */
 export function getPolylinePath(points: Point[], radius = 0, z = false): PathArray {
+  const targetIndex = points.length - 1;
   const sourcePoint = points[0];
-  const targetPoint = points[points.length - 1];
-  const controlPoints = points.slice(1, points.length - 1);
+  const targetPoint = points[targetIndex];
+  const controlPoints = points.slice(1, targetIndex);
   const pathArray: PathArray = [['M', sourcePoint[0], sourcePoint[1]]];
   controlPoints.forEach((midPoint, i) => {
     const prevPoint = controlPoints[i - 1] || sourcePoint;
@@ -235,7 +318,12 @@ export function getPolylinePath(points: Point[], radius = 0, z = false): PathArr
  * @param radius - <zh/> 圆角半径 | <en/> Radius of the rounded corner
  * @returns <zh/> 返回控制点 | <en/> Returns control points
  */
-function getBorderRadiusPoints(prevPoint: Point, midPoint: Point, nextPoint: Point, radius: number): [Point, Point] {
+export function getBorderRadiusPoints(
+  prevPoint: Point,
+  midPoint: Point,
+  nextPoint: Point,
+  radius: number,
+): [Point, Point] {
   const d0 = manhattanDistance(prevPoint, midPoint);
   const d1 = manhattanDistance(nextPoint, midPoint);
   // 取给定的半径和最小半径之间的较小值 | use the smaller value between the given radius and the minimum radius
@@ -284,8 +372,6 @@ export const getRadians = (bbox: AABB): Record<LoopPlacement, [number, number]> 
  * @param clockwise - <zh/> 是否顺时针 | <en/> Whether to draw the loop clockwise
  * @param sourcePort - <zh/> 起点连接桩 | <en/> Source port
  * @param targetPort - <zh/> 终点连接桩 | <en/> Target port
- * @param rawSourcePoint - <zh/> 起点 | <en/> Source point
- * @param rawTargetPoint - <zh/> 终点 | <en/> Target point
  * @returns <zh/> 起点和终点 | <en/> Start and end points
  */
 export function getLoopEndpoints(
@@ -331,8 +417,6 @@ export function getLoopEndpoints(
  * @param dist - <zh/> 从节点 keyShape 边缘到自环顶部的距离 | <en/> The distance from the edge of the node keyShape to the top of the self-loop
  * @param sourcePortKey - <zh/> 起点连接桩 key | <en/> Source port key
  * @param targetPortKey - <zh/> 终点连接桩 key | <en/> Target port key
- * @param rawSourcePoint - <zh/> 起点 | <en/> Source point
- * @param rawTargetPoint - <zh/> 终点 | <en/> Target point
  * @returns <zh/> 返回绘制环形边的路径 | <en/> Returns the path of the loop edge
  */
 export function getCubicLoopPath(
@@ -346,17 +430,98 @@ export function getCubicLoopPath(
   const sourcePort = node.getPorts()[(sourcePortKey || targetPortKey)!];
   const targetPort = node.getPorts()[(targetPortKey || sourcePortKey)!];
 
-  // 1. 获取起点和终点 | Get the start and end points
   let [sourcePoint, targetPoint] = getLoopEndpoints(node, placement, clockwise, sourcePort, targetPort);
 
-  // 2. 获取控制点 | Get the control points
   const controlPoints = getCubicLoopControlPoints(node, sourcePoint, targetPoint, dist);
 
-  // 3. 如果定义了连接桩，调整端点以与连接桩边界相交 | If the port is defined, adjust the endpoint to intersect with the port boundary
   if (sourcePort) sourcePoint = getPortConnectionPoint(sourcePort, controlPoints[0]);
-  if (targetPort) targetPoint = getPortConnectionPoint(targetPort, controlPoints[controlPoints.length - 1]);
+  if (targetPort) targetPoint = getPortConnectionPoint(targetPort, controlPoints.at(-1) as Point);
 
   return getCubicPath(sourcePoint, targetPoint, controlPoints);
+}
+
+/**
+ * <zh/> 获取圆弧自环边的绘制路径（使用 SVG Arc 命令绘制近似圆形）
+ *
+ * <en/> Get the arc loop edge path (using SVG Arc command for near-circular loops)
+ * @param node - <zh/> 节点实例 | <en/> Node instance
+ * @param placement - <zh/> 环形边相对于节点位置 | <en/> Loop position relative to the node
+ * @param clockwise - <zh/> 是否顺时针 | <en/> Whether to draw the loop clockwise
+ * @param dist - <zh/> 从节点 keyShape 边缘到自环顶部的距离 | <en/> The distance from the edge of the node keyShape to the top of the self-loop
+ * @param sourcePortKey - <zh/> 起点连接桩 key | <en/> Source port key
+ * @param targetPortKey - <zh/> 终点连接桩 key | <en/> Target port key
+ * @returns <zh/> 返回绘制圆弧环形边的路径 | <en/> Returns the arc loop edge path
+ */
+export function getArcLoopPath(
+  node: Node,
+  placement: LoopPlacement,
+  clockwise: boolean,
+  dist: number,
+  sourcePortKey?: string,
+  targetPortKey?: string,
+): PathArray {
+  const sourcePort = node.getPorts()[(sourcePortKey || targetPortKey)!];
+  const targetPort = node.getPorts()[(targetPortKey || sourcePortKey)!];
+
+  let [sourcePoint, targetPoint] = getLoopEndpoints(node, placement, clockwise, sourcePort, targetPort);
+
+  // 退化情况：起点和终点相同（同一端口）| Degenerate case: same start and end point (same port)
+  if (isEqual(sourcePoint, targetPoint)) {
+    const controlPoints = getCubicLoopControlPoints(node, sourcePoint, targetPoint, dist);
+    if (sourcePort) sourcePoint = getPortConnectionPoint(sourcePort, controlPoints[0]);
+    if (targetPort) targetPoint = getPortConnectionPoint(targetPort, controlPoints.at(-1) as Point);
+    return getCubicPath(sourcePoint, targetPoint, controlPoints);
+  }
+
+  const center = node.getCenter();
+
+  // 弦中点和凸起方向 | Chord midpoint and bulge direction
+  const chordMid: Point = [(sourcePoint[0] + targetPoint[0]) / 2, (sourcePoint[1] + targetPoint[1]) / 2, 0];
+  const bulgeDirLen = distance(center, chordMid);
+  const bulgeDir: Point = bulgeDirLen > 1e-6 ? (normalize(subtract(chordMid, center)) as Point) : [0, -1, 0];
+
+  // 圆弧参数：R = (c² + 4h²) / (8h) | Circular arc parameters
+  const chordLen = distance(sourcePoint, targetPoint);
+  const h = Math.max(Math.abs(dist), 0.01);
+  const R = (chordLen * chordLen + 4 * h * h) / (8 * h);
+
+  // 弧顶点 | Apex point
+  const apex: Point = [chordMid[0] + bulgeDir[0] * h, chordMid[1] + bulgeDir[1] * h, 0];
+
+  // 圆弧中心（弧顶点沿凸起方向内缩 R）| Arc center (apex retreated by R along bulge direction)
+  const arcCenter: Point = [chordMid[0] + bulgeDir[0] * (h - R), chordMid[1] + bulgeDir[1] * (h - R), 0];
+
+  // 用 atan2 计算各点相对于圆弧中心的角度 | Compute angles from arc center
+  const twoPI = 2 * Math.PI;
+  const θs = Math.atan2(sourcePoint[1] - arcCenter[1], sourcePoint[0] - arcCenter[0]);
+  const θt = Math.atan2(targetPoint[1] - arcCenter[1], targetPoint[0] - arcCenter[0]);
+  const θa = Math.atan2(apex[1] - arcCenter[1], apex[0] - arcCenter[0]);
+
+  // 判断顺时针方向是否经过弧顶点 | Check if CW direction passes through apex
+  const cwAngleToTarget = (((θt - θs) % twoPI) + twoPI) % twoPI;
+  const cwAngleToApex = (((θa - θs) % twoPI) + twoPI) % twoPI;
+  const cwPassesThroughApex = cwAngleToApex <= cwAngleToTarget + 1e-6;
+
+  const sweepFlag = cwPassesThroughApex ? 1 : 0;
+  const arcAngle = cwPassesThroughApex ? cwAngleToTarget : twoPI - cwAngleToTarget;
+  const largeArcFlag = arcAngle > Math.PI ? 1 : 0;
+
+  // 端口调整：用切线方向作为虚拟控制点 | Port adjustment using tangent direction
+  if (sourcePort) {
+    const srcR: Point = [sourcePoint[0] - arcCenter[0], sourcePoint[1] - arcCenter[1], 0];
+    const tangent: Point = sweepFlag === 1 ? [-srcR[1], srcR[0], 0] : [srcR[1], -srcR[0], 0];
+    sourcePoint = getPortConnectionPoint(sourcePort, add(sourcePoint, tangent));
+  }
+  if (targetPort) {
+    const tgtR: Point = [targetPoint[0] - arcCenter[0], targetPoint[1] - arcCenter[1], 0];
+    const tangent: Point = sweepFlag === 1 ? [tgtR[1], -tgtR[0], 0] : [-tgtR[1], tgtR[0], 0];
+    targetPoint = getPortConnectionPoint(targetPort, add(targetPoint, tangent));
+  }
+
+  return [
+    ['M', sourcePoint[0], sourcePoint[1]],
+    ['A', R, R, 0, largeArcFlag, sweepFlag, targetPoint[0], targetPoint[1]],
+  ] as unknown as PathArray;
 }
 
 /**
@@ -404,8 +569,6 @@ export function getCubicLoopControlPoints(
  * @param dist - <zh/> 从节点 keyShape 边缘到自环顶部的距离 | <en/> The distance from the edge of the node keyShape to the top of the self-loop
  * @param sourcePortKey - <zh/> 起点连接桩 key | <en/> Source port key
  * @param targetPortKey - <zh/> 终点连接桩 key | <en/> Target port key
- * @param rawSourcePoint - <zh/> 起点 | <en/> Source point
- * @param rawTargetPoint - <zh/> 终点 | <en/> Target point
  * @returns <zh/> 返回绘制环形折线边的路径 | <en/> Returns the path of the loop polyline edge
  */
 export function getPolylineLoopPath(
@@ -429,7 +592,7 @@ export function getPolylineLoopPath(
 
   // 3. 如果定义了连接桩，调整端点以与连接桩边界相交 | If the port is defined, adjust the endpoint to intersect with the port boundary
   if (sourcePort) sourcePoint = getPortConnectionPoint(sourcePort, controlPoints[0]);
-  if (targetPort) targetPoint = getPortConnectionPoint(targetPort, controlPoints[controlPoints.length - 1]);
+  if (targetPort) targetPoint = getPortConnectionPoint(targetPort, controlPoints.at(-1) as Point);
 
   return getPolylinePath([sourcePoint, ...controlPoints, targetPoint], radius);
 }
@@ -450,7 +613,7 @@ export function getPolylineLoopControlPoints(node: Node, sourcePoint: Point, tar
 
   // 1. 起点和终点相同 | The start and end points are the same
   if (isEqual(sourcePoint, targetPoint)) {
-    const side = getNearestSideToPoint(bbox, sourcePoint);
+    const side = getNearestBoundarySide(sourcePoint, bbox);
     switch (side) {
       case 'left':
         controlPoints.push([sourcePoint[0] - dist, sourcePoint[1]]);
@@ -474,8 +637,8 @@ export function getPolylineLoopControlPoints(node: Node, sourcePoint: Point, tar
         break;
     }
   } else {
-    const sourceSide = getNearestSideToPoint(bbox, sourcePoint);
-    const targetSide = getNearestSideToPoint(bbox, targetPoint);
+    const sourceSide = getNearestBoundarySide(sourcePoint, bbox);
+    const targetSide = getNearestBoundarySide(targetPoint, bbox);
     // 2. 起点与终点同边 | The start and end points are on the same side
     if (sourceSide === targetSide) {
       const side = sourceSide;
@@ -545,4 +708,46 @@ export function getSubgraphRelatedEdges(ids: ID[], getRelatedEdges: (id: ID) => 
   });
 
   return { edges: Array.from(edges), internal: Array.from(internal), external: Array.from(external) };
+}
+
+/**
+ * <zh/> 获取边的实际连接节点
+ *
+ * <en/> Get the actual connected object of the edge
+ * @param node - <zh/> 逻辑连接节点数据 | <en/> Logical connection node data
+ * @param getParentData - <zh/> 获取父节点数据 | <en/> Get parent node data
+ * @returns <zh/> 实际连接节点数据 | <en/> Actual connected node data
+ */
+export function findActualConnectNodeData(node: NodeLikeData, getParentData: (id: ID) => NodeLikeData | undefined) {
+  const path: NodeLikeData[] = [];
+  let current = node;
+  while (current) {
+    path.push(current);
+    const parent = getParentData(idOf(current));
+    if (parent) current = parent;
+    else break;
+  }
+
+  if (path.some((n) => n.style?.collapsed)) {
+    const index = path.reverse().findIndex(isCollapsed);
+    return path[index] || path.at(-1);
+  }
+
+  return node;
+}
+
+/**
+ * <zh/> 获取箭头大小，若用户未指定，则根据线宽自动计算
+ *
+ * <en/> Get the size of the arrow
+ * @param lineWidth - <zh/> 箭头所在边的线宽 | <en/> The line width of the edge where the arrow is located
+ * @param size - <zh/> 自定义箭头大小 | <en/> Custom arrow size
+ * @returns <zh/> 箭头大小 | <en/> Arrow size
+ */
+export function getArrowSize(lineWidth: number, size?: Size): Size {
+  if (size) return size;
+
+  if (lineWidth < 4) return 10;
+  if (lineWidth === 4) return 12;
+  return lineWidth * 2.5;
 }

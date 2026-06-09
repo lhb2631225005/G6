@@ -1,13 +1,13 @@
-import type { G6Spec } from '@/src';
-import { Graph, Utils } from '@/src';
 import tree from '@@/dataset/file-system.json';
+import type { GraphOptions } from '@antv/g6';
+import { Graph, treeToGraphData } from '@antv/g6';
 
 export const layoutIndented: TestCase = async (context) => {
-  const options: G6Spec = {
+  const options: GraphOptions = {
     ...context,
     y: -200,
     zoom: 0.5,
-    data: Utils.treeToGraphData(tree),
+    data: treeToGraphData(tree),
     theme: 'light',
     layout: {
       type: 'indented',
@@ -23,9 +23,7 @@ export const layoutIndented: TestCase = async (context) => {
     },
     node: { style: { size: 20 } },
     edge: {
-      style: {
-        type: 'polyline',
-      },
+      type: 'polyline',
     },
   };
 

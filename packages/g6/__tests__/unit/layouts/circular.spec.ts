@@ -4,7 +4,7 @@ import {
   layoutCircularDegree,
   layoutCircularDivision,
   layoutCircularSpiral,
-} from '@/__tests__/demos';
+} from '@@/demos';
 import { createDemoGraph } from '@@/utils';
 
 describe('layout circular', () => {
@@ -25,8 +25,8 @@ describe('layout circular', () => {
       endAngle: Math.PI,
       divisions: 5,
       ordering: 'degree',
-    }),
-      await graph.layout();
+    });
+    await graph.layout();
 
     await expect(graph).toMatchSnapshot(__filename, 'configuration-translate-division');
     graph.destroy();

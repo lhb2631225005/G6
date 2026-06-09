@@ -1,40 +1,42 @@
 import type { DisplayObjectConfig, RectStyleProps as GRectStyleProps, Group } from '@antv/g';
 import { Rect as GRect } from '@antv/g';
-import { deepMix } from '@antv/util';
 import { ICON_SIZE_RATIO } from '../../constants/element';
 import type { IconStyleProps } from '../shapes';
 import type { BaseNodeStyleProps } from './base-node';
 import { BaseNode } from './base-node';
 
-export type RectStyleProps = BaseNodeStyleProps<KeyStyleProps>;
+/**
+ * <zh/> 矩形节点样式配置项
+ *
+ * <en/> Rect node style props
+ */
+export interface RectStyleProps extends BaseNodeStyleProps {}
 type ParsedRectStyleProps = Required<RectStyleProps>;
-type KeyStyleProps = GRectStyleProps;
 
 /**
- * Draw Rect based on BaseNode, override drawKeyShape.
+ * <zh/> 矩形节点
+ *
+ * <en/> Rect node
  */
 export class Rect extends BaseNode<RectStyleProps> {
-  static defaultStyleProps: Partial<RectStyleProps> = {
-    size: [48, 24],
-    anchor: [0.5, 0.5],
-  };
-
   constructor(options: DisplayObjectConfig<RectStyleProps>) {
-    super(deepMix({}, { style: Rect.defaultStyleProps }, options));
+    super(options);
   }
 
-  protected getKeyStyle(attributes: ParsedRectStyleProps): KeyStyleProps {
+  protected getKeyStyle(attributes: ParsedRectStyleProps): GRectStyleProps {
     const [width, height] = this.getSize(attributes);
     return {
-      ...(super.getKeyStyle(attributes) as KeyStyleProps),
+      ...super.getKeyStyle(attributes),
       width,
       height,
+      x: -width / 2,
+      y: -height / 2,
     };
   }
 
   protected getIconStyle(attributes: ParsedRectStyleProps): false | IconStyleProps {
     const style = super.getIconStyle(attributes);
-    const { width, height } = this.getKeyStyle(attributes);
+    const { width, height } = this.getShape<GRect>('key').attributes;
 
     return style
       ? ({

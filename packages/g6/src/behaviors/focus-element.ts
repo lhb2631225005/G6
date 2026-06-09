@@ -1,14 +1,17 @@
-import type { FederatedMouseEvent } from '@antv/g';
-import type { ID } from '@antv/graphlib';
 import { isFunction } from '@antv/util';
 import { CommonEvent } from '../constants';
+import { ELEMENT_TYPES } from '../constants/element';
 import type { RuntimeContext } from '../runtime/types';
-import type { BehaviorEvent, ViewportAnimationEffectTiming } from '../types';
+import type { IElementEvent, ViewportAnimationEffectTiming } from '../types';
+import { Shortcut, ShortcutKey } from '../utils/shortcut';
 import type { BaseBehaviorOptions } from './base-behavior';
 import { BaseBehavior } from './base-behavior';
 
-const FOCUS_ELEMENT_TYPES = ['node', 'combo'];
-
+/**
+ * <zh/> 聚焦元素交互配置项
+ *
+ * <en/> Focus element behavior options
+ */
 export interface FocusElementOptions extends BaseBehaviorOptions {
   /**
    * <zh/> 是否启用动画以及动画配置
@@ -19,11 +22,29 @@ export interface FocusElementOptions extends BaseBehaviorOptions {
   /**
    * <zh/> 是否启用聚焦功能
    *
-   * <en/> Whether to enable the function of dragging the node
+   * <en/> Whether to enable the function of focusing on the element
+   * @defaultValue true
    */
-  enable?: boolean | ((event: BehaviorEvent<FederatedMouseEvent> | BehaviorEvent<KeyboardEvent>) => boolean);
+  enable?: boolean | ((event: IElementEvent) => boolean);
+  /**
+   * <zh/> 触发聚焦的组合键
+   * 支持按下组合键的同时点击元素才能触发聚焦
+   *
+   * <en/> The shortcut key to trigger focus
+   * Focus can only be triggered when the element is clicked while the key combination is pressed.
+   */
+  trigger?: ShortcutKey;
 }
 
+/**
+ * <zh/> 聚焦元素交互行为
+ *
+ * <en/> Focus element behavior
+ * @remarks
+ * <zh/> 点击元素时，将元素聚焦到视图中心。
+ *
+ * <en/> When an element is clicked, the element is focused to the center of the view.
+ */
 export class FocusElement extends BaseBehavior<FocusElementOptions> {
   static defaultOptions: Partial<FocusElementOptions> = {
     animation: {
@@ -31,10 +52,14 @@ export class FocusElement extends BaseBehavior<FocusElementOptions> {
       duration: 500,
     },
     enable: true,
+    trigger: [],
   };
+
+  private shortcut: Shortcut;
 
   constructor(context: RuntimeContext, options: FocusElementOptions) {
     super(context, Object.assign({}, FocusElement.defaultOptions, options));
+    this.shortcut = new Shortcut(context.graph);
     this.bindEvents();
   }
 
@@ -42,48 +67,49 @@ export class FocusElement extends BaseBehavior<FocusElementOptions> {
     const { graph } = this.context;
     this.unbindEvents();
 
-    FOCUS_ELEMENT_TYPES.forEach((type) => {
-      graph.on(`${type}:${CommonEvent.CLICK}`, this.clickFocusElement);
+    ELEMENT_TYPES.forEach((type) => {
+      graph.on(`${type}:${CommonEvent.CLICK}`, this.focus);
     });
   }
 
-  private getSelectedNodeIDs(currTarget: ID[]) {
-    return Array.from(
-      new Set(
-        this.context.graph
-          .getElementDataByState('node', this.options.state)
-          .map((node) => node.id)
-          .concat(currTarget),
-      ),
-    );
-  }
-
-  private clickFocusElement = async (event: BehaviorEvent<FederatedMouseEvent>) => {
+  private focus = async (event: IElementEvent) => {
     if (!this.validate(event)) return;
-    const { animation } = this.options;
     const { graph } = this.context;
-    const id = this.getSelectedNodeIDs([event.target.id]);
 
-    await graph.focusElement(id, animation);
+    await graph.focusElement(event.target.id, this.options.animation);
   };
 
-  private validate(event: BehaviorEvent<FederatedMouseEvent>) {
-    if (this.destroyed) return false;
+  private validate(event: IElementEvent) {
+    if (this.destroyed || !this.isKeydown()) return false;
     const { enable } = this.options;
     if (isFunction(enable)) return enable(event);
     return !!enable;
   }
 
+  /**
+   * <zh/> 当前按键是否和 trigger 配置一致
+   *
+   * <en/> Is the current key consistent with the trigger configuration
+   * @returns <zh/> 是否一致 | <en/> Is consistent
+   * @internal
+   */
+  private isKeydown(): boolean {
+    const { trigger } = this.options;
+    if (!trigger?.length) return true;
+    return this.shortcut.match(trigger);
+  }
+
   private unbindEvents() {
     const { graph } = this.context;
 
-    FOCUS_ELEMENT_TYPES.forEach((type) => {
-      graph.off(`${type}:${CommonEvent.CLICK}`, this.clickFocusElement);
+    ELEMENT_TYPES.forEach((type) => {
+      graph.off(`${type}:${CommonEvent.CLICK}`, this.focus);
     });
   }
 
   public destroy() {
     this.unbindEvents();
+    this.shortcut.destroy();
     super.destroy();
   }
 }

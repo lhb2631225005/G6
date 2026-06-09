@@ -1,25 +1,33 @@
+import { CanvasEvent } from '@antv/g';
+import { Canvas, ComboEvent, CommonEvent, EdgeEvent, NodeEvent } from '@antv/g6';
 import type { Controller } from 'lil-gui';
 import GUI from 'lil-gui';
+import Stats from 'stats.js';
 import '../src/preset';
 import * as demos from './demos';
 import { createGraphCanvas } from './utils';
 
+// inject
+Object.assign(window, { NodeEvent, EdgeEvent, ComboEvent, CommonEvent });
+
 type Options = {
-  Type: string;
+  Search: string;
   Demo: string;
   Renderer: string;
   Theme: string;
   Animation: boolean;
+  MultiLayers: boolean;
   [keys: string]: any;
 };
 
 const options: Options = {
-  Type: 'cases',
+  Search: '',
   Demo: Object.keys(demos)[0],
   Renderer: 'canvas',
   GridLine: true,
   Theme: 'light',
   Animation: true,
+  MultiLayers: true,
   interval: 0,
   Reload: () => {},
   forms: [],
@@ -30,12 +38,18 @@ const params = ['Type', 'Demo', 'Renderer', 'GridLine', 'Theme', 'Animation'] as
 syncParamsFromSearch();
 
 const panels = initPanel();
+const stats = initStats();
 
 window.onload = render;
 
 function initPanel() {
   const panel = new GUI({ container: document.getElementById('panel')!, autoPlace: true });
   const Demo = panel.add(options, 'Demo', Object.keys(demos)).onChange(render);
+  const Search = panel.add(options, 'Search').onChange((keyword: string) => {
+    const keys = Object.keys(demos);
+    const filtered = keys.filter((key) => key.toLowerCase().includes(keyword.toLowerCase()));
+    Demo.options(filtered);
+  });
   const Renderer = panel.add(options, 'Renderer', { Canvas: 'canvas', SVG: 'svg', WebGL: 'webgl' }).onChange(render);
   const Theme = panel.add(options, 'Theme', { Light: 'light', Dark: 'dark' }).onChange(render);
   const GridLine = panel.add(options, 'GridLine').onChange(() => {
@@ -43,29 +57,84 @@ function initPanel() {
     applyGridLine();
   });
   const Animation = panel.add(options, 'Animation').onChange(render);
+  const MultiLayers = panel.add(options, 'MultiLayers').onChange(render);
   const reload = panel.add(options, 'Reload').onChange(render);
-  return { panel, Demo, Renderer, GridLine, Theme, Animation, reload };
+
+  const goTo = (diff: number) => {
+    // @ts-expect-error private property
+    const keys = Demo._values;
+    const currentIndex = keys.indexOf(options.Demo);
+    const nextIndex = (currentIndex + diff + keys.length) % keys.length;
+    options.Demo = keys[nextIndex];
+    Demo.updateDisplay();
+    render();
+  };
+
+  globalThis.addEventListener('keydown', (e) => {
+    if (['ArrowRight', 'ArrowDown'].includes(e.key)) {
+      goTo(1);
+    } else if (['ArrowLeft', 'ArrowUp'].includes(e.key)) {
+      goTo(-1);
+    }
+  });
+
+  return { panel, Demo, Search, Renderer, GridLine, Theme, Animation, MultiLayers, reload };
 }
+
+function initStats() {
+  const container = document.getElementById('panel')!;
+  const stats = new Stats();
+  stats.showPanel(0);
+  const dom = stats.dom;
+  Object.assign(dom.style, { position: 'relative', top: 'unset', right: 'unset' });
+  container.appendChild(dom);
+  return stats;
+}
+
+let canvas: Canvas | undefined;
+const statsListener = () => stats.update();
 
 async function render() {
   syncParamsToSearch();
   applyTheme();
   destroyForm();
+  if (canvas) {
+    canvas.getLayer().removeEventListener(CanvasEvent.AFTER_RENDER, statsListener);
+  }
 
   const $container = initContainer();
 
   applyGridLine();
 
   // render
-  const { Renderer, Demo, Animation, Theme } = options;
-  const canvas = createGraphCanvas($container, 500, 500, Renderer);
-  await canvas.init();
+  const { Renderer, Demo, Animation, Theme, MultiLayers } = options;
+
+  const canvasOptions = { enableMultiLayer: MultiLayers };
+
+  canvas = createGraphCanvas($container, 500, 500, Renderer, canvasOptions);
+
+  canvas.getLayer().addEventListener(CanvasEvent.AFTER_RENDER, statsListener);
+
+  await canvas.ready;
   const testCase = demos[Demo as keyof typeof demos];
   if (!testCase) return;
 
-  const result = await testCase({ container: canvas, animation: Animation, theme: Theme });
+  performance.clearMarks();
+  performance.clearMeasures();
+  performance.mark('demo-start');
 
-  Object.assign(window, { graph: result });
+  const graph = await testCase({
+    container: canvas,
+    animation: Animation,
+    theme: Theme,
+    canvas: canvasOptions,
+  });
+
+  performance.mark('demo-end');
+  performance.measure('demo', 'demo-start', 'demo-end');
+  console.log('Time:', performance.getEntriesByName('demo')[0].duration, 'ms');
+
+  Object.assign(window, { graph, __g_instances__: Object.values(graph.getCanvas().getLayers()) });
 
   renderForm(panels.panel, testCase.form);
 }

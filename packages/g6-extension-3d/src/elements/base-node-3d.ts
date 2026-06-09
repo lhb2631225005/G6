@@ -2,18 +2,29 @@ import type { BaseStyleProps, DisplayObjectConfig, Group } from '@antv/g';
 import type { ProceduralGeometry as GGeometry, Material as GMaterial } from '@antv/g-plugin-3d';
 import { Mesh } from '@antv/g-plugin-3d';
 import type { IMaterial, Plugin } from '@antv/g-plugin-device-renderer';
-import type { BaseNodeStyleProps } from '@antv/g6';
-import { BaseNode, Utils } from '@antv/g6';
-import { PrefixObject } from '@antv/g6/lib/types';
+import type { BaseNodeStyleProps, Prefix } from '@antv/g6';
+import { BaseNode, omitStyleProps, subStyleProps } from '@antv/g6';
 import { deepMix } from '@antv/util';
 import { Material } from '../types';
 import { createMaterial } from '../utils/material';
 
-export type BaseNode3DStyleProps = BaseNodeStyleProps<MeshStyleProps> & {
+/**
+ * <zh/> 3D 节点样式
+ *
+ * <en/> 3D node style props
+ */
+export interface BaseNode3DStyleProps extends BaseNodeStyleProps, Prefix<'material', IMaterial> {
+  geometry?: GGeometry<any>;
+  material?: GMaterial<any>;
   texture?: string | TexImageSource;
   materialType?: Material['type'];
-} & PrefixObject<IMaterial, 'material'>;
+}
 
+/**
+ * <zh/> 3D 节点基类
+ *
+ * <en/> 3D node base class
+ */
 export abstract class BaseNode3D<S extends BaseNode3DStyleProps> extends BaseNode<S> {
   static defaultStyleProps: Partial<BaseNode3DStyleProps> = {
     materialType: 'basic',
@@ -22,7 +33,7 @@ export abstract class BaseNode3D<S extends BaseNode3DStyleProps> extends BaseNod
   public type = 'node-3d';
 
   protected get plugin() {
-    const renderer = this.attributes.context!.canvas.renderers['main'];
+    const renderer = this.context.canvas.getRenderer('main');
     const plugin = renderer.getPlugin('device-renderer');
     return plugin as unknown as Plugin;
   }
@@ -40,7 +51,7 @@ export abstract class BaseNode3D<S extends BaseNode3DStyleProps> extends BaseNod
   }
 
   protected getKeyStyle(attributes: Required<S>): MeshStyleProps {
-    const style = Utils.omitStyleProps(super.getKeyStyle(attributes), 'material');
+    const style = omitStyleProps(super.getKeyStyle(attributes), 'material');
     const geometry = this.getGeometry(attributes);
     const material = this.getMaterial(attributes);
     return { x: 0, y: 0, z: 0, ...style, geometry, material };
@@ -50,19 +61,18 @@ export abstract class BaseNode3D<S extends BaseNode3DStyleProps> extends BaseNod
     return this.upsert('key', Mesh, this.getKeyStyle(attributes), container);
   }
 
-  protected abstract getGeometry(attributes: Required<S>): GGeometry<any> | undefined;
+  protected abstract getGeometry(attributes: Required<S>): GGeometry<any>;
 
-  protected getMaterial(attributes: Required<S>): GMaterial<any> | undefined {
+  protected getMaterial(attributes: Required<S>): GMaterial<any> {
     const { texture } = attributes;
-    const materialStyle = Utils.subStyleProps<Material>(attributes, 'material');
+    const materialStyle = subStyleProps<Material>(attributes, 'material');
     return createMaterial(this.plugin, materialStyle, texture);
   }
 }
-
 export interface MeshStyleProps extends BaseStyleProps {
   x?: number | string;
   y?: number | string;
   z?: number | string;
-  geometry?: GGeometry<any>;
-  material?: GMaterial<any>;
+  geometry: GGeometry<any>;
+  material: GMaterial<any>;
 }

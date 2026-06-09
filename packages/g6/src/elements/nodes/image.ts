@@ -1,51 +1,86 @@
 import type { DisplayObjectConfig, RectStyleProps as GRectStyleProps, Group } from '@antv/g';
-import { Image as GImage, ImageStyleProps as GImageStyleProps, Rect as GRect } from '@antv/g';
-import { deepMix } from '@antv/util';
+import { ImageStyleProps as GImageStyleProps, Rect as GRect } from '@antv/g';
 import { ICON_SIZE_RATIO } from '../../constants/element';
-import type { PrefixObject } from '../../types';
 import { subStyleProps } from '../../utils/prefix';
-import { add } from '../../utils/vector';
+import { mergeOptions } from '../../utils/style';
+import { add, toVector2 } from '../../utils/vector';
 import type { IconStyleProps } from '../shapes';
+import { Image as ImageShape } from '../shapes';
+import { connectImage, dispatchPositionChange } from '../shapes/image';
 import type { BaseNodeStyleProps } from './base-node';
 import { BaseNode } from './base-node';
 
-export type ImageStyleProps = BaseNodeStyleProps<KeyStyleProps>;
-type ParsedImageStyleProps = Required<ImageStyleProps>;
-type KeyStyleProps = GImageStyleProps & PrefixObject<HaloStyleProps, 'halo'>;
-type HaloStyleProps = GRectStyleProps;
+/**
+ * <zh/> 图片节点样式配置项
+ *
+ * <en/> Image node style props
+ */
+export interface ImageStyleProps extends BaseNodeStyleProps {
+  /**
+   * <zh/> 图片来源，即图片地址字符串
+   *
+   * <en/> Image source, i.e. image address string
+   */
+  img?: string | HTMLImageElement;
+  /**
+   * <zh/> 该属性为 img 的别名
+   *
+   * <en/> This property is an alias for img
+   */
+  src?: string | HTMLImageElement;
+}
 
+/**
+ * <zh/> 图片节点
+ *
+ * <en/> Image node
+ */
 export class Image extends BaseNode<ImageStyleProps> {
   static defaultStyleProps: Partial<ImageStyleProps> = {
-    size: 50,
+    size: 32,
   };
 
   constructor(options: DisplayObjectConfig<ImageStyleProps>) {
-    super(deepMix({}, { style: Image.defaultStyleProps }, options));
+    super(mergeOptions({ style: Image.defaultStyleProps }, options));
   }
 
-  protected getKeyStyle(attributes: ParsedImageStyleProps): KeyStyleProps {
+  protected getKeyStyle(attributes: Required<ImageStyleProps>): GImageStyleProps {
     const [width, height] = this.getSize(attributes);
-    const keyStyle = super.getKeyStyle(attributes) as unknown as ParsedImageStyleProps;
+    const { fillOpacity, opacity = fillOpacity, ...keyStyle } = super.getKeyStyle(attributes);
+
     return {
+      opacity,
       ...keyStyle,
       width,
       height,
-      anchor: [0.5, 0.5] as [number, number],
+      x: -width / 2,
+      y: -height / 2,
     };
   }
 
-  protected getHaloStyle(attributes: ParsedImageStyleProps): false | HaloStyleProps {
-    if (attributes.halo === false) return false;
-    const { fill: keyStyleFill, stroke: keyStyleStroke, ...keyStyle } = this.getKeyStyle(attributes);
-    const haloStyle = subStyleProps<ImageStyleProps>(this.getGraphicStyle(attributes), 'halo');
-    const haloLineWidth = Number(haloStyle.lineWidth);
-    const [width, height] = add(this.getSize(attributes), [haloLineWidth, haloLineWidth]);
-    const fill = 'transparent';
-
-    return { ...keyStyle, ...haloStyle, width, height, fill } as unknown as HaloStyleProps;
+  public getBounds() {
+    return this.getShape('key').getBounds();
   }
 
-  protected getIconStyle(attributes: ParsedImageStyleProps): false | IconStyleProps {
+  protected getHaloStyle(attributes: Required<ImageStyleProps>): false | GRectStyleProps {
+    if (attributes.halo === false) return false;
+    const { fill: keyStyleFill, stroke: keyStyleStroke, ...keyStyle } = this.getShape<GRect>('key').attributes;
+    const haloStyle = subStyleProps(this.getGraphicStyle(attributes), 'halo');
+    const haloLineWidth = Number(haloStyle.lineWidth);
+    const [width, height] = add(toVector2(this.getSize(attributes)), [haloLineWidth, haloLineWidth]);
+    const { lineWidth } = haloStyle;
+    const recalculate = {
+      fill: 'transparent',
+      lineWidth: lineWidth / 2,
+      width: width - lineWidth / 2,
+      height: height - lineWidth / 2,
+      x: -(width - lineWidth / 2) / 2,
+      y: -(height - lineWidth / 2) / 2,
+    };
+    return { ...haloStyle, ...recalculate };
+  }
+
+  protected getIconStyle(attributes: Required<ImageStyleProps>): false | IconStyleProps {
     const style = super.getIconStyle(attributes);
     const [width, height] = this.getSize(attributes);
 
@@ -58,11 +93,20 @@ export class Image extends BaseNode<ImageStyleProps> {
       : false;
   }
 
-  protected drawKeyShape(attributes: ParsedImageStyleProps, container: Group): GImage | undefined {
-    return this.upsert('key', GImage, this.getKeyStyle(attributes), container);
+  protected drawKeyShape(attributes: Required<ImageStyleProps>, container: Group): ImageShape | undefined {
+    const image = this.upsert('key', ImageShape, this.getKeyStyle(attributes), container);
+    connectImage(this);
+    return image;
   }
 
-  protected drawHaloShape(attributes: ParsedImageStyleProps, container: Group): void {
+  protected drawHaloShape(attributes: Required<ImageStyleProps>, container: Group): void {
     this.upsert('halo', GRect, this.getHaloStyle(attributes), container);
+  }
+
+  public update(attr?: Partial<ImageStyleProps>): void {
+    super.update(attr);
+    if (attr && ('x' in attr || 'y' in attr || 'z' in attr)) {
+      dispatchPositionChange(this);
+    }
   }
 }

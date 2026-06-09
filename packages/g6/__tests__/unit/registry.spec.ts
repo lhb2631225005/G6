@@ -1,28 +1,35 @@
-import { getExtension, getExtensions, register } from '@/src';
 import {
   Circle,
   CircleCombo,
   Cubic,
   CubicHorizontal,
+  CubicRadial,
   CubicVertical,
   Diamond,
+  Donut,
   Ellipse,
+  ExtensionCategory,
+  HTML,
   Hexagon,
   Image,
   Line,
   Polyline,
   Quadratic,
   Rect,
+  RectCombo,
   Star,
   Triangle,
-} from '@/src/elements';
-import { RectCombo } from '@/src/elements/combos/rect';
+  getExtension,
+  getExtensions,
+  register,
+} from '@/src';
 import { dark, light } from '@/src/themes';
+import { Circle as GCircle } from '@antv/g';
 import { pick } from '@antv/util';
 
 describe('registry', () => {
   it('registerBuiltInPlugins', () => {
-    expect(getExtensions('node')).toEqual({
+    expect(getExtensions(ExtensionCategory.NODE)).toEqual({
       circle: Circle,
       ellipse: Ellipse,
       image: Image,
@@ -30,21 +37,24 @@ describe('registry', () => {
       star: Star,
       triangle: Triangle,
       diamond: Diamond,
+      donut: Donut,
       hexagon: Hexagon,
+      html: HTML,
     });
-    expect(getExtensions('edge')).toEqual({
+    expect(getExtensions(ExtensionCategory.EDGE)).toEqual({
       cubic: Cubic,
       line: Line,
       polyline: Polyline,
       quadratic: Quadratic,
       'cubic-horizontal': CubicHorizontal,
       'cubic-vertical': CubicVertical,
+      'cubic-radial': CubicRadial,
     });
-    expect(getExtensions('combo')).toEqual({
+    expect(getExtensions(ExtensionCategory.COMBO)).toEqual({
       circle: CircleCombo,
       rect: RectCombo,
     });
-    expect(getExtensions('theme')).toEqual({
+    expect(getExtensions(ExtensionCategory.THEME)).toEqual({
       dark,
       light,
     });
@@ -54,24 +64,55 @@ describe('registry', () => {
     class CircleNode {}
     class RectNode {}
     class Edge {}
-    register('node', 'circle-node', CircleNode as any);
-    register('node', 'rect-node', RectNode as any);
-    register('edge', 'line-edge', Edge as any);
-    expect(getExtension('node', 'circle-node')).toEqual(CircleNode);
-    expect(getExtension('node', 'rect-node')).toEqual(RectNode);
-    expect(getExtension('node', 'diamond-node')).toEqual(undefined);
-    expect(getExtension('edge', 'line-edge')).toEqual(Edge);
+    register(ExtensionCategory.NODE, 'circle-node', CircleNode as any);
+    register(ExtensionCategory.NODE, 'rect-node', RectNode as any);
+    register(ExtensionCategory.EDGE, 'line-edge', Edge as any);
+    expect(getExtension(ExtensionCategory.NODE, 'circle-node')).toEqual(CircleNode);
+    expect(getExtension(ExtensionCategory.NODE, 'rect-node')).toEqual(RectNode);
+    expect(getExtension(ExtensionCategory.NODE, 'diamond-node')).toEqual(undefined);
+    expect(getExtension(ExtensionCategory.EDGE, 'line-edge')).toEqual(Edge);
 
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
-    register('node', 'circle-node', CircleNode as any);
-    expect(consoleErrorSpy.mock.calls[0][0]).toBe('The extension circle-node of node has been registered before.');
+    register(ExtensionCategory.NODE, 'circle-node', CircleNode as any);
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(0);
 
     consoleErrorSpy.mockRestore();
 
-    expect(pick(getExtensions('node'), ['circle-node', 'rect-node'])).toEqual({
+    expect(pick(getExtensions(ExtensionCategory.NODE), ['circle-node', 'rect-node'])).toEqual({
       'circle-node': CircleNode,
       'rect-node': RectNode,
     });
+  });
+
+  it('override', () => {
+    class CircleNode {}
+    class RectNode {}
+    register(ExtensionCategory.NODE, 'circle-node', CircleNode as any);
+    register(ExtensionCategory.NODE, 'circle-node', RectNode as any);
+    expect(getExtension(ExtensionCategory.NODE, 'circle-node')).toEqual(RectNode);
+  });
+
+  it('register shape', () => {
+    const shapes = getExtensions(ExtensionCategory.SHAPE);
+    expect(Object.keys(shapes)).toEqual([
+      'circle',
+      'ellipse',
+      'group',
+      'html',
+      'image',
+      'line',
+      'path',
+      'polygon',
+      'polyline',
+      'rect',
+      'text',
+      'label',
+      'badge',
+    ]);
+
+    register(ExtensionCategory.SHAPE, 'circle-shape', GCircle);
+
+    expect(getExtension(ExtensionCategory.SHAPE, 'circle-shape')).toEqual(GCircle);
   });
 });

@@ -1,29 +1,74 @@
 import { getDiamondPoints } from '@/src/utils/element';
 import {
+  centerOf,
+  deduplicate,
+  findNearestLine,
+  findNearestPointOnLine,
   findNearestPoints,
+  getDistanceToLine,
   getEllipseIntersectPoint,
-  getLinesIntersection,
   getPolygonIntersectPoint,
   getRectIntersectPoint,
+  getSymmetricPoint,
   isCollinear,
   isHorizontal,
-  isLinesParallel,
   isOrthogonal,
+  isPointInPolygon,
   isVertical,
   moveTo,
   parsePoint,
   round,
+  sortByClockwise,
+  sortByX,
   toPointObject,
 } from '@/src/utils/point';
 import { Circle, Rect } from '@antv/g';
 
 describe('Point Functions', () => {
   it('parsePoint', () => {
-    expect(parsePoint({ x: 100, y: 100 })).toEqual([100, 100]);
+    expect(parsePoint({ x: 100, y: 100 })).toEqual([100, 100, 0]);
   });
 
   it('toPointObject', () => {
-    expect(toPointObject([100, 100])).toEqual({ x: 100, y: 100 });
+    expect(toPointObject([100, 100])).toEqual({ x: 100, y: 100, z: 0 });
+  });
+
+  it('sortByX', () => {
+    expect(
+      sortByX([
+        [150, 150],
+        [50, 50],
+        [100, 100],
+      ]),
+    ).toEqual([
+      [50, 50],
+      [100, 100],
+      [150, 150],
+    ]);
+  });
+
+  it('deduplicate', () => {
+    expect(
+      deduplicate([
+        [100, 100],
+        [100, 100],
+        [100, 100],
+      ]),
+    ).toEqual([[100, 100]]);
+  });
+
+  it('sortByX', () => {
+    expect(
+      sortByX([
+        [100, 100],
+        [50, 50],
+        [150, 150],
+      ]),
+    ).toEqual([
+      [50, 50],
+      [100, 100],
+      [150, 150],
+    ]);
   });
 
   it('round', () => {
@@ -56,58 +101,9 @@ describe('Point Functions', () => {
     expect(isCollinear([100, 100], [50, 50], [150, 100])).toEqual(false);
   });
 
-  it('isLinesParallel', () => {
-    expect(
-      isLinesParallel(
-        [
-          [100, 100],
-          [100, 50],
-        ],
-        [
-          [100, 150],
-          [100, 200],
-        ],
-      ),
-    ).toEqual(true);
-    expect(
-      isLinesParallel(
-        [
-          [100, 100],
-          [100, 50],
-        ],
-        [
-          [100, 150],
-          [150, 200],
-        ],
-      ),
-    ).toEqual(false);
-  });
-
-  it('getLinesIntersection', () => {
-    expect(
-      getLinesIntersection(
-        [
-          [100, 0],
-          [100, 200],
-        ],
-        [
-          [0, 100],
-          [200, 100],
-        ],
-      ),
-    ).toEqual([100, 100]);
-    expect(
-      getLinesIntersection(
-        [
-          [100, 0],
-          [100, 200],
-        ],
-        [
-          [0, 100],
-          [50, 300],
-        ],
-      ),
-    ).toEqual(undefined);
+  it('getSymmetricPoint', () => {
+    expect(getSymmetricPoint([50, 50], [100, 100])).toEqual([150, 150]);
+    expect(getSymmetricPoint([-50, -50], [0, 0])).toEqual([50, 50]);
   });
 
   it('getRectIntersectPoint', () => {
@@ -120,6 +116,7 @@ describe('Point Functions', () => {
       },
     });
     expect(getRectIntersectPoint([110, 110], rect.getBounds())).toEqual([102, 102]);
+    expect(getRectIntersectPoint([110, 110], rect.getBounds(), true)).toEqual([100, 100]);
   });
 
   it('getEllipseIntersectPoint', () => {
@@ -131,6 +128,7 @@ describe('Point Functions', () => {
       },
     });
     expect(getEllipseIntersectPoint([110, 100], circle.getBounds())).toEqual([101, 100]);
+    expect(getEllipseIntersectPoint([110, 100], circle.getBounds(), true)).toEqual([99, 100]);
 
     const circle2 = new Circle({
       style: {
@@ -150,7 +148,7 @@ describe('Point Functions', () => {
   });
 
   it('getDiamondIntersectPoint', () => {
-    expect(getPolygonIntersectPoint([100, 100], [0, 0], getDiamondPoints(100, 100))).toEqual([25, 25]);
+    expect(getPolygonIntersectPoint([100, 100], [0, 0], getDiamondPoints(100, 100)).point).toEqual([25, 25]);
     expect(getDiamondPoints(0, 0)).toEqual([
       [0, -0],
       [0, 0],
@@ -182,6 +180,128 @@ describe('Point Functions', () => {
     ).toEqual([
       [0, 0],
       [1, 1],
+    ]);
+  });
+
+  it('isPointInPolygon', () => {
+    expect(
+      isPointInPolygon(
+        [10, 10],
+        [
+          [0, 0],
+          [100, 0],
+          [100, 100],
+          [0, 100],
+        ],
+      ),
+    ).toEqual(true);
+    expect(
+      isPointInPolygon(
+        [20, 20],
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+        ],
+      ),
+    ).toEqual(false);
+    expect(
+      isPointInPolygon(
+        [20, 30],
+        [
+          [0, 0],
+          [20, 0],
+          [20, 20],
+          [0, 20],
+        ],
+      ),
+    ).toEqual(false);
+  });
+
+  it('findNearestLine', () => {
+    expect(
+      findNearestLine(
+        [10, 10],
+        [
+          [
+            [20, 0],
+            [20, 20],
+          ],
+          [
+            [30, 0],
+            [30, 30],
+          ],
+        ],
+      ),
+    ).toEqual([
+      [20, 0],
+      [20, 20],
+    ]);
+  });
+
+  it('getDistanceToLine', () => {
+    expect(
+      getDistanceToLine(
+        [10, 10],
+        [
+          [20, 0],
+          [20, 20],
+        ],
+      ),
+    ).toEqual(10);
+  });
+
+  it('findNearestPointOnLine', () => {
+    expect(
+      findNearestPointOnLine(
+        [10, 10],
+        [
+          [20, 0],
+          [20, 20],
+        ],
+      ),
+    ).toEqual([20, 10]);
+    expect(
+      findNearestPointOnLine(
+        [10, 10],
+        [
+          [20, 20],
+          [20, 20],
+        ],
+      ),
+    ).toEqual([20, 20]);
+    expect(
+      findNearestPointOnLine(
+        [10, 10],
+        [
+          [20, 0],
+          [20, 5],
+        ],
+      ),
+    ).toEqual([20, 5]);
+  });
+
+  it('centerOf', () => {
+    expect(
+      centerOf([
+        [0, 0],
+        [100, 100],
+      ]),
+    ).toEqual([50, 50]);
+  });
+
+  it('sortByClockwise', () => {
+    expect(
+      sortByClockwise([
+        [100, 100],
+        [50, 50],
+        [150, 150],
+      ]),
+    ).toEqual([
+      [150, 150],
+      [100, 100],
+      [50, 50],
     ]);
   });
 });

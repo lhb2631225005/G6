@@ -11,11 +11,10 @@ describe('tree', () => {
       nodes: [
         {
           id: 'root',
-          style: {
-            children: ['child'],
-          },
+          depth: 0,
+          children: ['child'],
         },
-        { id: 'child' },
+        { id: 'child', depth: 1 },
       ],
       edges: [{ source: 'root', target: 'child' }],
     });
@@ -31,10 +30,12 @@ describe('tree', () => {
       nodes: [
         {
           id: 'root',
-          style: { fill: 'red', children: ['child'] },
+          children: ['child'],
+          depth: 0,
+          style: { fill: 'red' },
           data: { value: 10 },
         },
-        { id: 'child', style: { fill: 'green' }, data: { value: 1 } },
+        { id: 'child', depth: 1, style: { fill: 'green' }, data: { value: 1 } },
       ],
       edges: [{ source: 'root', target: 'child' }],
     });
@@ -59,10 +60,12 @@ describe('tree', () => {
       nodes: [
         {
           id: 'root',
-          style: { fill: 'red', children: ['child'] },
+          children: ['child'],
+          depth: 0,
+          style: { fill: 'red' },
           data: { value: 10 },
         },
-        { id: 'child', style: { fill: 'green' }, data: { value: 1 } },
+        { id: 'child', depth: 1, style: { fill: 'green' }, data: { value: 1 } },
       ],
       edges: [{ source: 'root', target: 'child', data: { weight: 11 } }],
     });

@@ -1,4 +1,4 @@
-import { Graph } from '@/src';
+import { Graph } from '@antv/g6';
 
 export const elementEdgePolyline: TestCase = async (context) => {
   const graph = new Graph({
@@ -52,7 +52,8 @@ export const elementEdgePolyline: TestCase = async (context) => {
         },
         {
           id: 'control-point-1',
-          style: { x: 100, y: 175, size: 4, type: 'circle' },
+          type: 'circle',
+          style: { x: 100, y: 175, size: 4 },
         },
         {
           id: 'node-5',
@@ -64,7 +65,8 @@ export const elementEdgePolyline: TestCase = async (context) => {
         },
         {
           id: 'control-point-2',
-          style: { x: 100, y: 300, size: 4, type: 'circle' },
+          type: 'circle',
+          style: { x: 100, y: 300, size: 4 },
         },
         {
           id: 'node-7',
@@ -84,7 +86,8 @@ export const elementEdgePolyline: TestCase = async (context) => {
         },
         {
           id: 'control-point-3',
-          style: { x: 340, y: 390, size: 4, type: 'circle' },
+          type: 'circle',
+          style: { x: 340, y: 390, size: 4 },
         },
       ],
       edges: [
@@ -113,7 +116,7 @@ export const elementEdgePolyline: TestCase = async (context) => {
         {
           source: 'node-1',
           target: 'node-2',
-          style: { router: true },
+          style: { router: { type: 'orth' } },
         },
         {
           source: 'node-3',
@@ -123,35 +126,36 @@ export const elementEdgePolyline: TestCase = async (context) => {
         {
           source: 'node-5',
           target: 'node-6',
-          style: { router: true, controlPoints: [[100, 300]] },
+          style: { router: { type: 'orth' }, controlPoints: [[100, 300]] },
         },
         {
           source: 'node-7',
           target: 'node-8',
-          style: { router: true },
+          style: { router: { type: 'orth' } },
         },
         {
           source: 'node-9',
           target: 'node-10',
-          style: { router: true, controlPoints: [[340, 390]] },
+          style: { router: { type: 'orth' }, controlPoints: [[340, 390]] },
         },
       ],
     },
     node: {
+      type: (d) => d.type || 'rect',
       style: {
-        type: (d) => d.style?.type || 'rect',
         size: (d) => d.style?.size || [50, 20],
-        color: '#f8f8f8',
+        fill: '#f8f8f8',
         stroke: '#8b9baf',
+        lineWidth: 1,
         labelPlacement: 'center',
         labelFill: '#8b9baf',
         portLineWidth: 0,
       },
     },
     edge: {
+      type: 'polyline',
       style: {
-        type: 'polyline',
-        color: '#1890FF',
+        stroke: '#1890FF',
       },
     },
   });

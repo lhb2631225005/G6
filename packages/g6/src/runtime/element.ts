@@ -1,54 +1,51 @@
 /* eslint-disable jsdoc/require-returns */
 /* eslint-disable jsdoc/require-param */
-import type { BaseStyleProps, DisplayObject, IAnimation } from '@antv/g';
+import type { BaseStyleProps } from '@antv/g';
 import { Group } from '@antv/g';
-import type { ID } from '@antv/graphlib';
-import { groupBy, isEmpty } from '@antv/util';
-import { executor as animationExecutor } from '../animations';
-import type { AnimationContext } from '../animations/types';
-import { AnimationType, ChangeTypeEnum, GraphEvent } from '../constants';
+import { groupBy } from '@antv/util';
+import { AnimationType, COMBO_KEY, ChangeType, GraphEvent } from '../constants';
 import { ELEMENT_TYPES } from '../constants/element';
-import type { BaseNode } from '../elements/nodes';
-import type { BaseShape } from '../elements/shapes';
-import { getExtension } from '../registry';
-import type { ComboData, EdgeData, NodeData } from '../spec';
+import { getExtension } from '../registry/get';
+import type { ComboData, EdgeData, GraphData, LayoutOptions, NodeData } from '../spec';
 import type { AnimationStage } from '../spec/element/animation';
+import type { DrawData, ProcedureData } from '../transforms/types';
 import type {
-  AnimatableTask,
   Combo,
   DataChange,
   Edge,
+  Element,
   ElementData,
   ElementDatum,
   ElementType,
+  ID,
   Node,
-  NodeLike,
   NodeLikeData,
   State,
   StyleIterationContext,
 } from '../types';
-import { executeAnimatableTasks, inferDefaultValue, withAnimationCallbacks } from '../utils/animation';
-import { cacheStyle, getCachedStyle, hasCachedStyle } from '../utils/cache';
+import { cacheStyle, hasCachedStyle } from '../utils/cache';
 import { reduceDataChanges } from '../utils/change';
-import { getSubgraphRelatedEdges } from '../utils/edge';
-import { updateStyle } from '../utils/element';
+import { isCollapsed } from '../utils/collapsibility';
+import { isOverridable } from '../utils/data';
+import { markToBeDestroyed, updateStyle } from '../utils/element';
 import type { BaseEvent } from '../utils/event';
-import { AnimateEvent, GraphLifeCycleEvent } from '../utils/event';
+import { AnimateEvent, ElementLifeCycleEvent, GraphLifeCycleEvent, emit } from '../utils/event';
 import { idOf } from '../utils/id';
 import { assignColorByPalette, parsePalette } from '../utils/palette';
+import { positionOf } from '../utils/position';
+import { print } from '../utils/print';
 import { computeElementCallbackStyle } from '../utils/style';
+import { themeOf } from '../utils/theme';
+import { subtract } from '../utils/vector';
+import { setVisibility } from '../utils/visibility';
 import type { RuntimeContext } from './types';
 
 export class ElementController {
   private context: RuntimeContext;
 
-  private container!: {
-    node: Group;
-    edge: Group;
-    combo: Group;
-  };
+  private container!: Group;
 
-  private elementMap: Record<ID, DisplayObject> = {};
+  private elementMap: Record<ID, Element> = {};
 
   private shapeTypeMap: Record<ID, string> = {};
 
@@ -57,34 +54,44 @@ export class ElementController {
   }
 
   public init() {
-    const { canvas } = this.context;
-    if (!this.container) {
-      this.container = {
-        node: canvas.appendChild(new Group({ style: { zIndex: 2 } })),
-        edge: canvas.appendChild(new Group({ style: { zIndex: 1 } })),
-        combo: canvas.appendChild(new Group({ style: { zIndex: 0 } })),
-      };
+    this.initContainer();
+  }
+
+  private initContainer() {
+    if (!this.container || this.container.destroyed) {
+      const { canvas } = this.context;
+      this.container = canvas.appendChild(new Group({ className: 'elements' }));
     }
   }
 
-  private emit(event: BaseEvent) {
-    const { graph } = this.context;
-    graph.emit(event.type, event);
+  private emit(event: BaseEvent, context: DrawContext) {
+    if (context.silence) return;
+    emit(this.context.graph, event);
   }
 
   private forEachElementData(callback: (elementType: ElementType, elementData: ElementData) => void) {
     ELEMENT_TYPES.forEach((elementType) => {
-      const elementData = this.context.model.getElementData(elementType);
+      const elementData = this.context.model.getElementsDataByType(elementType);
       callback(elementType, elementData);
     });
   }
 
-  private getTheme(elementType: ElementType) {
-    const { theme } = this.context.options;
-    if (!theme) return {};
+  public getElementType(elementType: ElementType, datum: ElementDatum) {
+    const { options, graph } = this.context;
+    const userDefinedType = isOverridable(datum) ? options[elementType]?.type || datum.type : datum.type;
 
-    const themeConfig = getExtension('theme', theme);
-    return themeConfig?.[elementType] || {};
+    if (!userDefinedType) {
+      if (elementType === 'edge') return 'line';
+      // node / combo
+      else return 'circle';
+    }
+    if (typeof userDefinedType === 'string') return userDefinedType;
+    // @ts-expect-error skip type check
+    return userDefinedType.call(graph, datum);
+  }
+
+  private getTheme(elementType: ElementType) {
+    return themeOf(this.context.options)[elementType] || {};
   }
 
   public getThemeStyle(elementType: ElementType) {
@@ -109,17 +116,18 @@ export class ElementController {
         parsePalette(this.getTheme(elementType)?.palette),
         parsePalette(options[elementType]?.palette),
       );
-      if (!isEmpty(palette) && palette?.field) {
+      if (palette?.field) {
         Object.assign(this.paletteStyle, assignColorByPalette(elementData, palette));
       }
     });
   }
 
-  public getPaletteStyle(id: ID) {
+  public getPaletteStyle(elementType: ElementType, id: ID): BaseStyleProps {
     const color = this.paletteStyle[id];
     if (!color) return {};
 
-    return { color };
+    if (elementType === 'edge') return { stroke: color };
+    return { fill: color };
   }
 
   private defaultStyle: Record<ID, Record<string, unknown>> = {};
@@ -129,19 +137,25 @@ export class ElementController {
    *
    * <en/> compute default style of single element
    */
-  private computedElementDefaultStyle(elementType: ElementType, context: StyleIterationContext) {
+  private computeElementDefaultStyle(elementType: ElementType, context: StyleIterationContext) {
     const { options } = this.context;
     const defaultStyle = options[elementType]?.style || {};
+    if ('transform' in defaultStyle && Array.isArray(defaultStyle.transform)) {
+      defaultStyle.transform = [...defaultStyle.transform];
+    }
     this.defaultStyle[idOf(context.datum)] = computeElementCallbackStyle(defaultStyle as any, context);
   }
 
   private computeElementsDefaultStyle(ids?: ID[]) {
+    const { graph } = this.context;
     this.forEachElementData((elementType, elementData) => {
-      elementData
-        .filter((datum) => ids === undefined || ids.includes(idOf(datum)))
-        .forEach((datum, index) => {
-          this.computedElementDefaultStyle(elementType, { datum, index, elementData });
-        });
+      const length = elementData.length;
+      for (let i = 0; i < length; i++) {
+        const datum = elementData[i];
+        if (ids === undefined || ids.includes(idOf(datum))) {
+          this.computeElementDefaultStyle(elementType, { datum, graph });
+        }
+      }
     });
   }
 
@@ -190,13 +204,16 @@ export class ElementController {
    * @param ids - <zh/> 计算指定元素的状态样式 | <en/> compute state style of specified elements
    */
   private computeElementsStatesStyle(ids?: ID[]) {
+    const { graph } = this.context;
     this.forEachElementData((elementType, elementData) => {
-      elementData
-        .filter((datum) => ids === undefined || ids.includes(idOf(datum)))
-        .forEach((datum, index) => {
+      const length = elementData.length;
+      for (let i = 0; i < length; i++) {
+        const datum = elementData[i];
+        if (ids === undefined || ids.includes(idOf(datum))) {
           const states = this.getElementState(idOf(datum));
-          this.computeElementStatesStyle(elementType, states, { datum, index, elementData });
-        });
+          this.computeElementStatesStyle(elementType, states, { datum, graph });
+        }
+      }
     });
   }
 
@@ -204,120 +221,66 @@ export class ElementController {
     return this.stateStyle[id] || {};
   }
 
-  private computeStyle(ids?: ID[]) {
+  private computeStyle(stage?: string, ids?: ID[]) {
+    const skip = ['translate', 'zIndex'];
+    if (stage && skip.includes(stage)) return;
+
     this.computePaletteStyle();
     this.computeElementsDefaultStyle(ids);
     this.computeElementsStatesStyle(ids);
   }
 
-  public getElement<T extends DisplayObject = BaseShape<any>>(id: ID): T | undefined {
+  public getElement<T extends Element>(id: ID): T | undefined {
     return this.elementMap[id] as T;
   }
 
   public getNodes() {
-    return this.container.node.children as Node[];
+    return this.context.model.getNodeData().map(({ id }) => this.elementMap[id]) as Node[];
   }
 
   public getEdges() {
-    return this.container.edge.children as Edge[];
+    return this.context.model.getEdgeData().map((edge) => this.elementMap[idOf(edge)]) as Edge[];
   }
 
   public getCombos() {
-    return this.container.combo.children as Combo[];
-  }
-
-  private getAnimation(elementType: ElementType, stage: AnimationStage) {
-    const { options } = this.context;
-
-    const userDefined = options?.[elementType]?.animation;
-    if (userDefined === false) return false;
-    const userDefinedStage = userDefined?.[stage];
-    if (userDefinedStage) return userDefinedStage;
-
-    const themeDefined = this.getTheme(elementType)?.animation;
-    if (themeDefined === false) return false;
-    const themeDefinedStage = themeDefined?.[stage];
-
-    return themeDefinedStage ?? false;
-  }
-
-  private getAnimationExecutor(
-    elementType: ElementType,
-    stage: AnimationStage,
-    animation: boolean = true,
-    context?: Partial<AnimationContext>,
-  ): AnimationExecutor {
-    const { options } = this.context;
-
-    if (options.animation === false || !animation) return () => null;
-
-    return (
-      id: ID,
-      shape: DisplayObject,
-      originalStyle: Record<string, unknown>,
-      modifiedStyle?: Record<string, unknown>,
-    ) => {
-      return animationExecutor(
-        shape,
-        this.getAnimation(elementType, stage),
-        {},
-        {
-          originalStyle,
-          modifiedStyle,
-          states: this.getElementState(id),
-          ...context,
-        },
-      );
-    };
-  }
-
-  /**
-   * <zh/> 获取边端点连接上下文
-   *
-   * <en/> Get edge end context
-   * @param id - <zh/> 边 id | <en/> edge id
-   * @returns <zh/> 边端点连接上下文 | <en/> edge end context
-   * @description
-   * <zh/> 只提供了最基本的节点示例和连接点位置信息，更多的上下文信息需要在边元素中计算
-   *
-   * <en/> Only the most basic node instances and connection point position information are provided, and more context information needs to be calculated in the edge element
-   */
-  private getEdgeEndsContext(datum: EdgeData) {
-    const { source, target } = datum;
-    const sourceNode = this.getElement<BaseNode>(source);
-    const targetNode = this.getElement<BaseNode>(target);
-
-    return { sourceNode, targetNode };
+    return this.context.model.getComboData().map(({ id }) => this.elementMap[id]) as Combo[];
   }
 
   public getElementComputedStyle(elementType: ElementType, datum: ElementDatum) {
     const id = idOf(datum);
     // 优先级(从低到高) Priority (from low to high):
     const themeStyle = this.getThemeStyle(elementType);
-    const paletteStyle = this.getPaletteStyle(id);
+    const paletteStyle = this.getPaletteStyle(elementType, id);
     const dataStyle = datum.style || {};
     const defaultStyle = this.getDefaultStyle(id);
     const themeStateStyle = this.getThemeStateStyle(elementType, this.getElementState(id));
     const stateStyle = this.getStateStyle(id);
 
-    const style = Object.assign({}, themeStyle, paletteStyle, dataStyle, defaultStyle, themeStateStyle, stateStyle);
+    const style = isOverridable(datum)
+      ? Object.assign({}, themeStyle, paletteStyle, dataStyle, defaultStyle, themeStateStyle, stateStyle)
+      : Object.assign({}, dataStyle);
 
-    if (elementType === 'edge') {
-      Object.assign(style, this.getEdgeEndsContext(datum as EdgeData));
-    } else if (elementType === 'combo') {
+    if (elementType === 'combo') {
       const childrenData = this.context.model.getChildrenData(id);
       const isCollapsed = !!style.collapsed;
-      const childrenNode = isCollapsed
-        ? []
-        : (childrenData.map((child) => this.getElement(idOf(child))).filter(Boolean) as NodeLike[]);
+      const childrenNode = isCollapsed ? [] : childrenData.map(idOf).filter((id) => this.getElement(id));
       Object.assign(style, { childrenNode, childrenData });
     }
-
-    if (!style.type) {
-      style.type = { node: 'circle', edge: 'line', combo: 'circle' }[elementType];
-    }
-
     return style;
+  }
+
+  private getDrawData(context: DrawContext): DrawPayload | null {
+    this.init();
+
+    const data = this.computeChangesAndDrawData(context);
+    if (!data) return null;
+
+    const { type = 'draw', stage = type } = context;
+    this.markDestroyElement(data.drawData);
+    // 计算样式 / Calculate style
+    this.computeStyle(stage);
+
+    return { type, stage, data };
   }
 
   /**
@@ -325,39 +288,87 @@ export class ElementController {
    *
    * <en/> start render process
    */
-  public async draw(drawContext: DrawContext = { animation: true }) {
-    const drawData = this.computeDrawData();
+  public draw(context: DrawContext = { animation: true }) {
+    const drawData = this.getDrawData(context);
     if (!drawData) return;
-    this.init();
 
-    // 计算样式 / Calculate style
-    this.computeStyle();
+    const {
+      data: {
+        drawData: { add, update, remove },
+      },
+    } = drawData;
 
-    // 创建渲染任务 / Create render task
-    const { add, update, remove } = drawData;
-    const destroyTasks = this.getDestroyTasks(remove, drawContext);
-    const createTasks = this.getCreateTasks(add, drawContext);
-    const updateTasks = this.getUpdateTasks(update, drawContext);
+    this.destroyElements(remove, context);
+    this.createElements(add, context);
+    this.updateElements(update, context);
 
-    await executeAnimatableTasks(
-      [...destroyTasks, ...createTasks, ...updateTasks],
-      drawContext.silence
-        ? {}
-        : {
-            before: () => this.emit(new GraphLifeCycleEvent(GraphEvent.BEFORE_DRAW)),
-            beforeAnimate: (animation) =>
-              this.emit(new AnimateEvent(GraphEvent.BEFORE_ANIMATE, AnimationType.DRAW, animation, drawData)),
-            afterAnimate: (animation) =>
-              this.emit(new AnimateEvent(GraphEvent.AFTER_ANIMATE, AnimationType.DRAW, animation, drawData)),
-            after: () => this.emit(new GraphLifeCycleEvent(GraphEvent.AFTER_DRAW)),
-          },
-    )?.finished;
+    return this.setAnimationTask(context, drawData);
   }
 
-  private computeDrawData() {
-    const { model } = this.context;
+  public async preLayoutDraw(context: DrawContext = { animation: true }) {
+    const preResult = this.getDrawData(context);
+    if (!preResult) return;
 
-    const tasks = reduceDataChanges(model.getChanges());
+    const {
+      data: { drawData },
+    } = preResult;
+
+    await this.context.layout?.preLayout?.(drawData);
+
+    const { add, update, remove } = drawData;
+    this.destroyElements(remove, context);
+    this.createElements(add, context);
+    this.updateElements(update, context);
+
+    return this.setAnimationTask(context, preResult);
+  }
+
+  private setAnimationTask(context: DrawContext, data: DrawPayload) {
+    const { animation, silence } = context;
+    const {
+      data: { dataChanges, drawData },
+      stage,
+      type,
+    } = data;
+
+    return this.context.animation!.animate(
+      animation,
+      silence
+        ? {}
+        : {
+            before: () =>
+              this.emit(
+                new GraphLifeCycleEvent(GraphEvent.BEFORE_DRAW, {
+                  dataChanges,
+                  animation,
+                  stage,
+                  render: type === 'render',
+                }),
+                context,
+              ),
+            beforeAnimate: (animation) =>
+              this.emit(new AnimateEvent(GraphEvent.BEFORE_ANIMATE, AnimationType.DRAW, animation, drawData), context),
+            afterAnimate: (animation) =>
+              this.emit(new AnimateEvent(GraphEvent.AFTER_ANIMATE, AnimationType.DRAW, animation, drawData), context),
+            after: () =>
+              this.emit(
+                new GraphLifeCycleEvent(GraphEvent.AFTER_DRAW, {
+                  dataChanges,
+                  animation,
+                  stage,
+                  render: type === 'render',
+                  firstRender: this.context.graph.rendered === false,
+                }),
+                context,
+              ),
+          },
+    );
+  }
+
+  private computeChangesAndDrawData(context: DrawContext) {
+    const { model } = this.context;
+    const dataChanges = model.getChanges();
+    const tasks = reduceDataChanges(dataChanges);
     if (tasks.length === 0) return null;
 
     const {
@@ -370,7 +381,24 @@ export class ElementController {
       ComboAdded = [],
       ComboUpdated = [],
       ComboRemoved = [],
-    } = groupBy(tasks, (change) => change.type) as unknown as Record<`${ChangeTypeEnum}`, DataChange[]>;
+    } = groupBy(tasks, (change) => change.type) as unknown as Record<`${ChangeType}`, DataChange[]>;
+
+    const moveToAddedIfUnrendered = (updated: DataChange[], added: DataChange[]) => {
+      const keptUpdates: DataChange[] = [];
+      updated.forEach((change) => {
+        const id = idOf(change.value);
+        if (!this.getElement(id)) {
+          added.push(change);
+        } else {
+          keptUpdates.push(change);
+        }
+      });
+      return keptUpdates;
+    };
+
+    const finalNodeUpdated = moveToAddedIfUnrendered(NodeUpdated, NodeAdded);
+    const finalEdgeUpdated = moveToAddedIfUnrendered(EdgeUpdated, EdgeAdded);
+    const finalComboUpdated = moveToAddedIfUnrendered(ComboUpdated, ComboAdded);
 
     const dataOf = <T extends DataChange['value']>(data: DataChange[]) =>
       new Map(
@@ -380,16 +408,16 @@ export class ElementController {
         }),
       );
 
-    const input: FlowData = {
+    const input: DrawData = {
       add: {
         nodes: dataOf<NodeData>(NodeAdded),
         edges: dataOf<EdgeData>(EdgeAdded),
         combos: dataOf<ComboData>(ComboAdded),
       },
       update: {
-        nodes: dataOf<NodeData>(NodeUpdated),
-        edges: dataOf<EdgeData>(EdgeUpdated),
-        combos: dataOf<ComboData>(ComboUpdated),
+        nodes: dataOf<NodeData>(finalNodeUpdated),
+        edges: dataOf<EdgeData>(finalEdgeUpdated),
+        combos: dataOf<ComboData>(finalComboUpdated),
       },
       remove: {
         nodes: dataOf<NodeData>(NodeRemoved),
@@ -397,171 +425,64 @@ export class ElementController {
         combos: dataOf<ComboData>(ComboRemoved),
       },
     };
+    const drawData = this.transformData(input, context);
 
-    const flows: Flow[] = [this.updateRelatedEdgeFlow, this.arrangeDrawOrderFlow, this.collapseExpandFlow];
-    const output = flows.reduce((data, flow) => flow(data), input);
-    return output;
+    // 清空变更 / Clear changes
+    model.clearChanges();
+
+    return { dataChanges, drawData };
   }
 
-  /**
-   * 如果更新了节点 / combo，需要更新连接的边
-   * If the node / combo is updated, the connected edge and the combo it is in need to be updated
-   */
-  private updateRelatedEdgeFlow: Flow = (input) => {
-    const { model } = this.context;
-    const {
-      update: { nodes, edges, combos },
-    } = input;
+  private transformData(input: DrawData, context: DrawContext): DrawData {
+    const transforms = this.context.transform.getTransformInstance();
 
-    const addRelatedEdges = (_: NodeLikeData, id: ID) => {
-      const relatedEdgesData = model.getRelatedEdgesData(id);
-      relatedEdgesData.forEach((edge) => edges.set(idOf(edge), edge));
-    };
-
-    nodes.forEach(addRelatedEdges);
-    combos.forEach(addRelatedEdges);
-
-    return input;
-  };
-
-  /**
-   * <zh/> 调整元素绘制顺序
-   *
-   * <en/> Adjust the drawing order of elements
-   */
-  private arrangeDrawOrderFlow: Flow = (input) => {
-    const { model } = this.context;
-
-    const combosToAdd = input.add.combos;
-
-    const order: [ID, ComboData, number][] = [];
-    combosToAdd.forEach((combo, id) => {
-      const ancestors = model.getAncestorsData(id, 'combo');
-      const path = ancestors.map((ancestor) => idOf(ancestor)).reverse();
-      // combo 的 zIndex 为距离根 combo 的深度
-      // The zIndex of the combo is the depth from the root combo
-      order.push([id, combo, path.length]);
-    });
-
-    input.add.combos = new Map(
-      order
-        // 基于 zIndex 降序排序，优先绘制子 combo / Sort based on zIndex in descending order, draw child combo first
-        .sort(([, , zIndex1], [, , zIndex2]) => zIndex2 - zIndex1)
-        .map(([id, datum]) => [id, datum]),
-    );
-
-    return input;
-  };
-
-  /**
-   * <zh/> 处理元素的收起和展开
-   *
-   * <en/> Process the collapse and expand of elements
-   */
-  private collapseExpandFlow: Flow = (input) => {
-    const { model } = this.context;
-    const { add, update } = input;
-    /**
-     * <zh/> 重新分配绘制任务
-     *
-     * <en/> Reassign drawing tasks
-     */
-    const reassignTo = (type: 'add' | 'update' | 'remove', elementType: ElementType, datum: ElementDatum) => {
-      const typeName = `${elementType}s` as keyof ProcedureData;
-      Object.entries(input).forEach(([_type, value]) => {
-        if (type === _type) value[typeName].set(idOf(datum), datum as any);
-        else value[typeName].delete(idOf(datum));
-      });
-    };
-
-    // combo 添加和更新的顺序为先子后父，因此采用倒序遍历
-    // The order of adding and updating combos is first child and then parent, so reverse traversal is used
-    const combos = [...input.update.combos.entries(), ...input.add.combos.entries()];
-    while (combos.length) {
-      const [id, combo] = combos.pop()!;
-
-      const isCollapsed = !!combo.style?.collapsed;
-      if (isCollapsed) {
-        const descendants = model.getDescendantsData(id);
-        const descendantIds = descendants.map(idOf);
-        const { internal, external } = getSubgraphRelatedEdges(descendantIds, (id) => model.getRelatedEdgesData(id));
-
-        // 移除所有后代元素 / Remove all descendant elements
-        descendants.forEach((descendant) => {
-          const descendantId = idOf(descendant);
-          // 不再处理当前 combo 的后代 combo
-          // No longer process the descendant combo of the current combo
-          const comboIndex = combos.findIndex(([id]) => id === descendantId);
-          if (comboIndex !== -1) combos.splice(comboIndex, 1);
-
-          const elementType = model.getElementType(descendantId);
-          reassignTo('remove', elementType, descendant);
-        });
-
-        // 如果是内部边/节点 销毁
-        // If it is an internal edge/node, destroy it
-        internal.forEach((edge) => reassignTo('remove', 'edge', edge));
-
-        // 如果是外部边，连接到收起对象上
-        // If it is an external edge, connect to the collapsed object
-        external.forEach((edge) => {
-          const id = idOf(edge);
-          const type = descendantIds.includes(edge.source) ? 'source' : 'target';
-          const datum = { ...edge, [type]: idOf(combo) };
-          if (add.edges.has(id)) add.edges.set(id, datum);
-          if (update.edges.has(id)) update.edges.set(id, datum);
-        });
-      } else {
-        const children = model.getChildrenData(id);
-        const childrenIds = children.map(idOf);
-        const { edges } = getSubgraphRelatedEdges(childrenIds, (id) => model.getRelatedEdgesData(id));
-
-        [...children, ...edges].forEach((descendant) => {
-          const id = idOf(descendant);
-          const elementType = model.getElementType(id);
-
-          const element = this.getElement(id);
-          // 如果节点不存在，则添加到新增列表，如果存在，添加到更新列表
-          // If the node does not exist, add it to the new list, if it exists, add it to the update list
-          if (element) reassignTo('update', elementType, descendant);
-          else reassignTo('add', elementType, descendant);
-
-          // 继续展开子节点 / Continue to expand child nodes
-          if (elementType === 'combo') combos.push([id, descendant as ComboData]);
-        });
-      }
-    }
-
-    return input;
-  };
+    return Object.values(transforms).reduce((data, transform) => transform.beforeDraw(data, context), input);
+  }
 
   private createElement(elementType: ElementType, datum: ElementDatum, context: DrawContext) {
-    const { animator } = context;
     const id = idOf(datum);
-    const currentShape = this.getElement(id);
-    if (currentShape) return () => null;
-    const { type, ...style } = this.getElementComputedStyle(elementType, datum);
+    const currentElement = this.getElement(id);
+    if (currentElement) return;
+    const type = this.getElementType(elementType, datum);
+    const style = this.getElementComputedStyle(elementType, datum);
 
     // get shape constructor
     const Ctor = getExtension(elementType, type);
-    if (!Ctor) return () => null;
-    const shape = this.container[elementType].appendChild(
+    if (!Ctor) return print.warn(`The element ${type} of ${elementType} is not registered.`);
+
+    this.emit(new ElementLifeCycleEvent(GraphEvent.BEFORE_ELEMENT_CREATE, elementType, datum), context);
+
+    const element = this.container.appendChild(
       new Ctor({
         id,
-        style: {
-          context: this.context,
-          ...style,
-        },
+        context: this.context,
+        style,
       }),
-    ) as DisplayObject;
+    ) as Element;
 
     this.shapeTypeMap[id] = type;
-    this.elementMap[id] = shape;
+    this.elementMap[id] = element;
 
-    return () => animator?.(id, shape, { ...shape.attributes, opacity: 0 }) || null;
+    const { stage = 'enter' } = context;
+
+    this.context.animation?.add(
+      {
+        element,
+        elementType,
+        stage,
+        originalStyle: { ...element.attributes },
+        updatedStyle: style,
+      },
+      {
+        after: () => {
+          this.emit(new ElementLifeCycleEvent(GraphEvent.AFTER_ELEMENT_CREATE, elementType, datum), context);
+          element.onCreate?.();
+        },
+      },
+    );
   }
 
-  private getCreateTasks(data: ProcedureData, context: Omit<DrawContext, 'animator'>): AnimatableTask[] {
+  private createElements(data: ProcedureData, context: DrawContext) {
     const { nodes, edges, combos } = data;
     const iteration: [ElementType, Map<ID, ElementDatum>][] = [
       ['node', nodes],
@@ -569,87 +490,89 @@ export class ElementController {
       ['edge', edges],
     ];
 
-    const tasks: AnimatableTask[] = [];
     iteration.forEach(([elementType, elementData]) => {
-      if (elementData.size === 0) return;
-      const animator = this.getAnimationExecutor(elementType, 'enter');
-      elementData.forEach((datum) =>
-        tasks.push(() => this.createElement(elementType, datum, { ...context, animator })),
-      );
+      elementData.forEach((datum) => this.createElement(elementType, datum, context));
     });
-
-    return tasks;
   }
 
-  /**
-   * <zh/> 由于 show 和 hide 的时序存在差异
-   * - show： 立即将元素显示出来，然后执行动画
-   * - hide： 先执行动画，然后隐藏元素
-   *
-   * 如果在调用 hide 后立即调用 show，hide 动画完成后会将元素隐藏
-   *
-   * 因此需要缓存元素最新的可见性
-   *
-   * <en/> Due to the difference in the timing of show and hide
-   * - show: immediately shows the element and then executes the animation
-   * - hide: executes the animation first, and then hides the element
-   *
-   * If show is called immediately after hide,it hide the element after hide animation completed
-   *
-   * Therefore, the latest visibility of the element needs to be cached
-   */
-  private latestElementVisibilityMap: WeakMap<DisplayObject, BaseStyleProps['visibility']> = new WeakMap();
+  private getUpdateStageStyle(elementType: ElementType, datum: ElementDatum, context: DrawContext) {
+    const { stage = 'update' } = context;
+
+    // 优化 translate 阶段，直接返回 x, y, z，避免计算样式
+    // Optimize the translate stage, return x, y, z directly to avoid calculating style
+    if (stage === 'translate') {
+      if (elementType === 'node' || elementType === 'combo') {
+        const { style: { x = 0, y = 0, z = 0 } = {} } = datum as NodeLikeData;
+        return { x, y, z };
+      } else return {};
+    }
+
+    return this.getElementComputedStyle(elementType, datum);
+  }
 
   private updateElement(elementType: ElementType, datum: ElementDatum, context: DrawContext) {
-    const { animator } = context;
-
     const id = idOf(datum);
-    const shape = this.getElement(id);
-    if (!shape) return () => null;
-    const { type, ...style } = this.getElementComputedStyle(elementType, datum);
+    const { stage = 'update' } = context;
+
+    const element = this.getElement(id);
+    if (!element) return () => null;
+
+    this.emit(new ElementLifeCycleEvent(GraphEvent.BEFORE_ELEMENT_UPDATE, elementType, datum), context);
+
+    const type = this.getElementType(elementType, datum);
+    const style = this.getUpdateStageStyle(elementType, datum, context);
 
     // 如果类型不同，需要先销毁原有元素，再创建新元素
     // If the type is different, you need to destroy the original element first, and then create a new element
     if (this.shapeTypeMap[id] !== type) {
-      return () => {
-        this.destroyElement(datum, { ...context, animation: false })();
-        this.createElement(elementType, datum, { ...context, animation: false })();
-        return null;
-      };
+      element.destroy();
+      delete this.shapeTypeMap[id];
+      delete this.elementMap[id];
+
+      this.createElement(elementType, datum, { animation: false, silence: true });
     }
 
-    // 如果是可见性更新 / If it is a visibility update
-    if (context.stage === 'visibility' && 'visibility' in style) {
-      // 缓存原始透明度 / Cache original opacity
-      if (!hasCachedStyle(shape, 'opacity')) cacheStyle(shape, 'opacity');
+    const exactStage = stage !== 'visibility' ? stage : style.visibility === 'hidden' ? 'hide' : 'show';
 
-      const originalOpacity = getCachedStyle(shape, 'opacity') ?? inferDefaultValue('opacity');
-      this.latestElementVisibilityMap.set(shape, style.visibility);
+    // 避免立即将 visibility 设置为 hidden，导致元素不可见，而是在 after 阶段再设置
+    // Avoid setting visibility to hidden immediately, causing the element to be invisible, but set it in the after phase
+    if (exactStage === 'hide') delete style['visibility'];
 
-      // show
-      if (style.visibility !== 'hidden') {
-        updateStyle(shape, { visibility: 'visible' });
-        return () => animator?.(id, shape, { ...shape.attributes, opacity: 0 }, { opacity: originalOpacity }) || null;
-      }
-      // hide
-      else if (style.visibility === 'hidden') {
-        return () =>
-          withAnimationCallbacks(
-            animator?.(id, shape, { ...shape.attributes, opacity: originalOpacity }, { opacity: 0 }) || null,
-            {
-              after: () => updateStyle(shape, { visibility: this.latestElementVisibilityMap.get(shape) }),
-            },
-          );
-      }
-    }
+    this.context.animation?.add(
+      {
+        element,
+        elementType,
+        stage: exactStage,
+        originalStyle: { ...element.attributes },
+        updatedStyle: style,
+      },
+      {
+        before: () => {
+          // 通过 elementMap[id] 访问最新的 element，防止 type 不同导致的 element 丢失
+          // Access the latest element through elementMap[id] to prevent the loss of element caused by different types
+          const element = this.elementMap[id];
+          if (stage !== 'collapse') updateStyle(element, style);
 
-    const originalStyle = { ...shape.attributes };
-    updateStyle(shape, style);
-
-    return () => animator?.(id, shape, originalStyle) || null;
+          if (stage === 'visibility') {
+            // 缓存原始透明度 / Cache original opacity
+            // 会在 animation controller 中访问该缓存值 / The cached value will be accessed in the animation controller
+            if (!hasCachedStyle(element, 'opacity')) cacheStyle(element, 'opacity');
+            this.visibilityCache.set(element, exactStage === 'show' ? 'visible' : 'hidden');
+            if (exactStage === 'show') setVisibility(element, 'visible');
+          }
+        },
+        after: () => {
+          const element = this.elementMap[id];
+          if (stage === 'collapse') updateStyle(element, style);
+          if (exactStage === 'hide') setVisibility(element, this.visibilityCache.get(element));
+          this.emit(new ElementLifeCycleEvent(GraphEvent.AFTER_ELEMENT_UPDATE, elementType, datum), context);
+          element.onUpdate?.();
+        },
+      },
+    );
   }
 
-  private getUpdateTasks(data: ProcedureData, context: Omit<DrawContext, 'animator'>): AnimatableTask[] {
+  private updateElements(data: ProcedureData, context: DrawContext) {
     const { nodes, edges, combos } = data;
     const iteration: [ElementType, Map<ID, ElementDatum>][] = [
       ['node', nodes],
@@ -657,38 +580,57 @@ export class ElementController {
       ['edge', edges],
     ];
 
-    const { animation, stage } = context;
-    const tasks: AnimatableTask[] = [];
     iteration.forEach(([elementType, elementData]) => {
-      if (elementData.size === 0) return [];
-      const animator = this.getAnimationExecutor(elementType, stage || 'update', animation);
-      elementData.forEach((datum) =>
-        tasks.push(() => this.updateElement(elementType, datum, { ...context, animator })),
-      );
+      elementData.forEach((datum) => this.updateElement(elementType, datum, context));
     });
-
-    return tasks;
   }
 
-  private destroyElement(datum: ElementDatum, context: DrawContext) {
-    const { animator } = context;
+  private visibilityCache = new WeakMap<Element, BaseStyleProps['visibility']>();
+
+  /**
+   * <zh/> 标记销毁元素
+   *
+   * <en/> mark destroy element
+   * @param data - <zh/> 绘制数据 | <en/> draw data
+   */
+  private markDestroyElement(data: DrawData) {
+    Object.values(data.remove).forEach((elementData) => {
+      elementData.forEach((datum) => {
+        const id = idOf(datum);
+        const element = this.getElement(id);
+        if (element) markToBeDestroyed(element);
+      });
+    });
+  }
+
+  private destroyElement(elementType: ElementType, datum: ElementDatum, context: DrawContext) {
+    const { stage = 'exit' } = context;
     const id = idOf(datum);
     const element = this.elementMap[id];
     if (!element) return () => null;
 
-    return () => {
-      const result = animator?.(id, element, { ...element.attributes }, { opacity: 0 }) || null;
-      withAnimationCallbacks(result, {
+    this.emit(new ElementLifeCycleEvent(GraphEvent.BEFORE_ELEMENT_DESTROY, elementType, datum), context);
+
+    this.context.animation?.add(
+      {
+        element,
+        elementType,
+        stage,
+        originalStyle: { ...element.attributes },
+        updatedStyle: {},
+      },
+      {
         after: () => {
           this.clearElement(id);
           element.destroy();
+          element.onDestroy?.();
+          this.emit(new ElementLifeCycleEvent(GraphEvent.AFTER_ELEMENT_DESTROY, elementType, datum), context);
         },
-      });
-      return result;
-    };
+      },
+    );
   }
 
-  private getDestroyTasks(data: ProcedureData, context: Omit<DrawContext, 'animator'>): AnimatableTask[] {
+  private destroyElements(data: ProcedureData, context: DrawContext) {
     const { nodes, edges, combos } = data;
     const iteration: [ElementType, Map<ID, ElementDatum>][] = [
       ['combo', combos],
@@ -696,17 +638,11 @@ export class ElementController {
       ['node', nodes],
     ];
 
-    const { animation, stage } = context;
-    const tasks: AnimatableTask[] = [];
     iteration.forEach(([elementType, elementData]) => {
-      if (elementData.size === 0) return [];
-      const animator = this.getAnimationExecutor(elementType, stage || 'exit', animation);
-      elementData.forEach((datum) => tasks.push(() => this.destroyElement(datum, { ...context, animator })));
+      elementData.forEach((datum) => this.destroyElement(elementType, datum, context));
     });
 
     // TODO 重新计算色板样式，如果是分组色板，则不需要重新计算
-
-    return tasks;
   }
 
   private clearElement(id: ID) {
@@ -717,55 +653,291 @@ export class ElementController {
     delete this.shapeTypeMap[id];
   }
 
-  public destroy() {
-    Object.values(this.elementMap).forEach((element) => element.destroy());
-    Object.values(this.container).forEach((container) => container.destroy());
-    // @ts-expect-error force delete
-    this.container = {};
+  /**
+   * <zh/> 将布局结果对齐到元素，避免视图偏移。会修改布局结果
+   *
+   * <en/> Align the layout result to the element to avoid view offset. Will modify the layout result
+   * @param layoutResult - <zh/> 布局结果 | <en/> layout result
+   * @param id - <zh/> 元素 ID | <en/> element ID
+   */
+  private alignLayoutResultToElement(layoutResult: GraphData, id: ID) {
+    const target = layoutResult.nodes?.find((node) => idOf(node) === id);
+
+    if (target) {
+      const originalPosition = positionOf(this.context.model.getNodeLikeDatum(id));
+      const modifiedPosition = positionOf(target);
+      const delta = subtract(originalPosition, modifiedPosition);
+      layoutResult.nodes?.forEach((node) => {
+        if (node.style?.x) node.style.x += delta[0];
+        if (node.style?.y) node.style.y += delta[1];
+        if (node.style?.z) node.style.z += delta[2] || 0;
+      });
+    }
+  }
+
+  /**
+   * <zh/> 同步布局结果
+   *
+   * <en/> Sync layout result
+   * @param id - <zh/> 元素 ID | <en/> element ID
+   * @param align - <zh/> 是否对齐 | <en/> whether to align
+   */
+  private async syncLayoutResult(id: ID, align?: boolean) {
+    const { layout, model } = this.context;
+    if (!layout) return;
+
+    const layoutOptions = this.context.options.layout;
+    const forcePreLayout = (opts: LayoutOptions): LayoutOptions => {
+      if (Array.isArray(opts)) {
+        return opts.map((o) => ({ ...o, preLayout: true }));
+      }
+      return { ...opts, preLayout: true };
+    };
+    const layoutResult = await layout.simulate(layoutOptions ? forcePreLayout(layoutOptions) : undefined);
+    if (align) this.alignLayoutResultToElement(layoutResult, id);
+    model.updateData(layoutResult);
+  }
+
+  /**
+   * <zh/> 收起节点
+   *
+   * <en/> collapse node
+   * @param id - <zh/> 元素 ID | <en/> element ID
+   * @param options - <zh/> 选项 | <en/> options
+   */
+  public async collapseNode(id: ID, options: CollapseExpandNodeOptions): Promise<void> {
+    const { animation, align } = options;
+    await this.syncLayoutResult(id, align);
+
+    // 重新计算数据 / Recalculate data
+    const data = this.computeChangesAndDrawData({ stage: 'collapse', animation });
+    // 重置动画 / Reset animation
+    this.context.animation!.clear();
+    this.computeStyle('collapse');
+
+    if (!data) return;
+    const { drawData } = data;
+    const { add, remove, update } = drawData;
+    this.markDestroyElement(drawData);
+    const context = { animation, stage: 'collapse', data: drawData } as const;
+
+    this.destroyElements(remove, context);
+    this.createElements(add, context);
+    this.updateElements(update, context);
+
+    await this.context.animation!.animate(
+      animation,
+      {
+        beforeAnimate: (animation) =>
+          this.emit(new AnimateEvent(GraphEvent.BEFORE_ANIMATE, AnimationType.COLLAPSE, animation, drawData), context),
+        afterAnimate: (animation) =>
+          this.emit(new AnimateEvent(GraphEvent.AFTER_ANIMATE, AnimationType.COLLAPSE, animation, drawData), context),
+      },
+      {
+        collapse: {
+          target: id,
+          descendants: Array.from(remove.nodes).map(([, node]) => idOf(node)),
+          position: positionOf(update.nodes.get(id)!),
+        },
+      },
+    )?.finished;
+  }
+
+  /**
+   * <zh/> 展开节点
+   *
+   * <en/> expand node
+   * @param id - <zh/> 元素 ID | <en/> element ID
+   * @param animation - <zh/> 是否使用动画，默认为 true | <en/> Whether to use animation, default is true
+   */
+  public async expandNode(id: ID, options: CollapseExpandNodeOptions): Promise<void> {
+    const { model } = this.context;
+    const { animation, align } = options;
+    const position = positionOf(model.getNodeData([id])[0]);
+
+    await this.syncLayoutResult(id, align);
+
+    // 重新计算数据 / Recalculate data
+    const data = this.computeChangesAndDrawData({ stage: 'expand', animation });
+    this.createElements(data!.drawData.add, { animation: false, stage: 'expand', target: id });
+    // 重置动画 / Reset animation
+    this.context.animation!.clear();
+    this.computeStyle('expand');
+    if (!data) return;
+    const { drawData } = data;
+    const { update, add } = drawData;
+
+    const context = { animation, stage: 'expand', data: drawData } as const;
+
+    // 将新增节点/边添加到更新列表 / Add new nodes/edges to the update list
+    add.edges.forEach((edge) => update.edges.set(idOf(edge), edge));
+    add.nodes.forEach((node) => update.nodes.set(idOf(node), node));
+
+    this.updateElements(update, context);
+
+    await this.context.animation!.animate(
+      animation,
+      {
+        beforeAnimate: (animation) =>
+          this.emit(new AnimateEvent(GraphEvent.BEFORE_ANIMATE, AnimationType.EXPAND, animation, drawData), context),
+        afterAnimate: (animation) =>
+          this.emit(new AnimateEvent(GraphEvent.AFTER_ANIMATE, AnimationType.EXPAND, animation, drawData), context),
+      },
+      {
+        expand: {
+          target: id,
+          descendants: Array.from(add.nodes).map(([, node]) => idOf(node)),
+          position,
+        },
+      },
+    )?.finished;
+  }
+
+  public async collapseCombo(id: ID, animation: boolean): Promise<void> {
+    const { model, element } = this.context;
+    if (model.getAncestorsData(id, COMBO_KEY).some((datum) => isCollapsed(datum))) return;
+
+    const combo = element!.getElement<Combo>(id)!;
+
+    const position = combo.getComboPosition({
+      ...combo.attributes,
+      collapsed: true,
+    });
+
+    const data = this.computeChangesAndDrawData({ stage: 'collapse', animation });
+    if (!data) return;
+
+    const { dataChanges, drawData } = data;
+    this.markDestroyElement(drawData);
+    const { update, remove } = drawData;
+    const context = { animation, stage: 'collapse', data: drawData } as const;
+
+    this.destroyElements(remove, context);
+    this.updateElements(update, context);
+
+    const idsOf = (data: Map<ID, ElementDatum>) => Array.from(data).map(([, node]) => idOf(node));
+
+    await this.context.animation!.animate(
+      animation,
+      {
+        before: () => this.emit(new GraphLifeCycleEvent(GraphEvent.BEFORE_DRAW, { dataChanges, animation }), context),
+        beforeAnimate: (animation) =>
+          this.emit(new AnimateEvent(GraphEvent.BEFORE_ANIMATE, AnimationType.COLLAPSE, animation, drawData), context),
+        afterAnimate: (animation) =>
+          this.emit(new AnimateEvent(GraphEvent.AFTER_ANIMATE, AnimationType.COLLAPSE, animation, drawData), context),
+        after: () => this.emit(new GraphLifeCycleEvent(GraphEvent.AFTER_DRAW, { dataChanges, animation }), context),
+      },
+      {
+        collapse: {
+          target: id,
+          descendants: [...idsOf(remove.nodes), ...idsOf(remove.combos)],
+          position,
+        },
+      },
+    )?.finished;
+  }
+
+  public async expandCombo(id: ID, animation: boolean): Promise<void> {
+    const { model } = this.context;
+    const position = positionOf(model.getComboData([id])[0]);
+
+    // 重新计算数据 / Recalculate data
+    this.computeStyle('expand');
+    const data = this.computeChangesAndDrawData({ stage: 'expand', animation });
+    if (!data) return;
+
+    const { dataChanges, drawData } = data;
+    const { add, update } = drawData;
+    const context = { animation, stage: 'expand', data: drawData, target: id } as const;
+
+    this.createElements(add, context);
+    this.updateElements(update, context);
+
+    const idsOf = (data: Map<ID, ElementDatum>) => Array.from(data).map(([, node]) => idOf(node));
+
+    await this.context.animation!.animate(
+      animation,
+      {
+        before: () => this.emit(new GraphLifeCycleEvent(GraphEvent.BEFORE_DRAW, { dataChanges, animation }), context),
+        beforeAnimate: (animation) =>
+          this.emit(new AnimateEvent(GraphEvent.BEFORE_ANIMATE, AnimationType.EXPAND, animation, drawData), context),
+        afterAnimate: (animation) =>
+          this.emit(new AnimateEvent(GraphEvent.AFTER_ANIMATE, AnimationType.EXPAND, animation, drawData), context),
+        after: () => this.emit(new GraphLifeCycleEvent(GraphEvent.AFTER_DRAW, { dataChanges, animation }), context),
+      },
+      {
+        expand: {
+          target: id,
+          descendants: [...idsOf(add.nodes), ...idsOf(add.combos)],
+          position,
+        },
+      },
+    )?.finished;
+  }
+
+  /**
+   * <zh/> 清空所有元素
+   *
+   * <en/> clear all elements
+   */
+  public clear() {
+    this.container.destroy();
+    this.initContainer();
     this.elementMap = {};
     this.shapeTypeMap = {};
     this.defaultStyle = {};
     this.stateStyle = {};
     this.paletteStyle = {};
+  }
+
+  public destroy() {
+    this.clear();
+    this.container.destroy();
     // @ts-expect-error force delete
     this.context = {};
-    // @ts-expect-error force delete
-    this.latestElementVisibilityMap = undefined;
   }
 }
 
-type AnimationExecutor = (
-  id: ID,
-  shape: DisplayObject,
-  originalStyle: Record<string, unknown>,
-  modifiedStyle?: Record<string, unknown>,
-) => IAnimation | null;
-
-type DrawContext = {
-  animator?: AnimationExecutor;
+export interface DrawContext {
   /** <zh/> 是否使用动画，默认为 true | <en/> Whether to use animation, default is true */
-  animation: boolean;
+  animation?: boolean;
   /** <zh/> 当前绘制阶段 | <en/> Current draw stage */
   stage?: AnimationStage;
-  /** <zh/> 是否不抛出事件 | <en/> Whether not to throw events */
+  /** <zh/> 是否不抛出事件 | <en/> Whether not to dispatch events */
   silence?: boolean;
-};
-
-/**
- * <zh/> 在 Element Controller 中，为了提高查询性能，统一使用 Map 存储数据
- *
- * <en/> In Element Controller, in order to improve query performance, use Map to store data uniformly
- */
-class ProcedureData {
-  nodes: Map<ID, NodeData> = new Map();
-  edges: Map<ID, EdgeData> = new Map();
-  combos: Map<ID, ComboData> = new Map();
+  /** <zh/> 收起/展开的对象 ID | <en/> ID of the object to collapse/expand */
+  collapseExpandTarget?: ID;
+  /** <zh/> 绘制类型 | <en/> Draw type */
+  type?: 'render' | 'draw';
+  /** <zh/> 展开阶段的目标元素 id | <en/> ID of the target element in the expand stage */
+  target?: ID;
 }
 
-type FlowData = {
-  add: ProcedureData;
-  update: ProcedureData;
-  remove: ProcedureData;
-};
+interface DrawPayload {
+  data: {
+    dataChanges: DataChange[];
+    drawData: DrawData;
+  };
+  stage: AnimationStage;
+  type: 'render' | 'draw';
+}
 
-type Flow = (input: FlowData) => FlowData;
+/**
+ * <zh/> 展开/收起节点选项
+ *
+ * <en/> Expand / collapse node options
+ */
+export interface CollapseExpandNodeOptions {
+  /**
+   * <zh/> 是否使用动画
+   *
+   * <en/> Whether to use animation
+   */
+  animation?: boolean;
+  /**
+   * <zh/> 保证展开/收起的节点位置不变
+   *
+   * <en/> Ensure that the position of the expanded/collapsed node remains unchanged
+   */
+  align?: boolean;
+}

@@ -1,5 +1,9 @@
+import type { ID } from '@/src';
 import { Rect } from '@/src/elements';
+import { Badge, Label } from '@/src/elements/shapes';
 import {
+  findActualConnectNodeData,
+  getBadgePositionStyle,
   getCubicPath,
   getCurveControlPoint,
   getLabelPositionStyle,
@@ -12,7 +16,6 @@ import {
   parseCurvePosition,
 } from '@/src/utils/edge';
 import { AABB, Line } from '@antv/g';
-import type { ID } from '@antv/graphlib';
 
 describe('edge', () => {
   describe('getLabelPositionStyle', () => {
@@ -49,35 +52,35 @@ describe('edge', () => {
 
       const labelPlacement = getLabelPositionStyle(line, 'center', false, 0, 0);
       expect(labelPlacement.textAlign).toEqual('center');
-      expect(labelPlacement.x).toEqual(50);
-      expect(labelPlacement.y).toEqual(100);
+      expect(labelPlacement.transform).toEqual([['translate', 50, 100]]);
 
       const labelPosition2 = getLabelPositionStyle(line, 'center', true, 5, 5);
       expect(labelPosition2.textAlign).toEqual('center');
-      expect(labelPosition2.x).toEqual(55);
-      expect(labelPosition2.y).toEqual(105);
+      expect(labelPosition2.transform).toEqual([['translate', 55, 105]]);
 
       const labelPosition3 = getLabelPositionStyle(line, 'start', true, 5, 5);
       expect(labelPosition3.textAlign).toEqual('left');
-      expect(labelPosition3.x).toEqual(5);
-      expect(labelPosition3.y).toEqual(105);
+      expect(labelPosition3.transform).toEqual([['translate', 5, 105]]);
 
       const labelPosition4 = getLabelPositionStyle(line, 'end', true, 5, 5);
       expect(labelPosition4.textAlign).toEqual('right');
-      expect(labelPosition4.x).toBeCloseTo(100 * 0.99 + 5);
-      expect(labelPosition4.y).toEqual(105);
+      expect(labelPosition4.transform).toEqual([['translate', 104, 105]]);
 
       const labelPosition5 = getLabelPositionStyle(line, 0.5, true, 5, 5);
       expect(labelPosition5.textAlign).toEqual('center');
-      expect(labelPosition5.x).toEqual(55);
-      expect(labelPosition5.y).toEqual(105);
+      expect(labelPosition5.transform).toEqual([['translate', 55, 105]]);
 
       //  with rotation angle below Math.PI
       const labelPosition6 = getLabelPositionStyle(line1, 'center', true, 5, 5);
       expect(labelPosition6.textAlign).toEqual('center');
-      expect(labelPosition6.transform).toEqual('rotate(45deg)');
-      expect(labelPosition6.x).toEqual(50 + 5 * Math.cos(Math.PI / 4) - 5 * Math.sin(Math.PI / 4));
-      expect(labelPosition6.y).toEqual(150 + 5 * Math.sin(Math.PI / 4) + 5 * Math.cos(Math.PI / 4));
+      expect(labelPosition6.transform).toEqual([
+        [
+          'translate',
+          50 + 5 * Math.cos(Math.PI / 4) - 5 * Math.sin(Math.PI / 4),
+          150 + 5 * Math.sin(Math.PI / 4) + 5 * Math.cos(Math.PI / 4),
+        ],
+        ['rotate', 45],
+      ]);
 
       const labelPosition7 = getLabelPositionStyle(line1, 'start', true, 5, 5);
       expect(labelPosition7.textAlign).toEqual('left');
@@ -88,9 +91,26 @@ describe('edge', () => {
       // with rotation angle over Math.PI
       const labelPosition9 = getLabelPositionStyle(line2, 'center', true, 5, 5);
       expect(labelPosition9.textAlign).toEqual('center');
-      expect(labelPosition9.transform).toEqual('rotate(-45deg)');
-      expect(labelPosition9.x).toEqual(50 + 5 * Math.cos(-Math.PI / 4) - 5 * Math.sin(-Math.PI / 4));
-      expect(labelPosition9.y).toEqual(150 + 5 * Math.sin(-Math.PI / 4) + 5 * Math.cos(-Math.PI / 4));
+      expect(labelPosition9.transform).toEqual([
+        [
+          'translate',
+          50 + 5 * Math.cos(-Math.PI / 4) - 5 * Math.sin(-Math.PI / 4),
+          150 + 5 * Math.sin(-Math.PI / 4) + 5 * Math.cos(-Math.PI / 4),
+        ],
+        ['rotate', -45],
+      ]);
+    });
+  });
+
+  it('getBadgePositionStyle', () => {
+    const shapeMap = {
+      key: new Line({ style: { x1: 0, y1: 0, x2: 100, y2: 0 } }),
+      label: new Label({ style: { text: 'label', background: true } }),
+      badge: new Badge({ style: { text: 'badge', background: true } }),
+    };
+    expect(getBadgePositionStyle(shapeMap, 'prefix', 'center', 10, 0)).toEqual({
+      textAlign: 'center',
+      transform: [['translate', 50, 0]],
     });
   });
 
@@ -237,8 +257,8 @@ describe('edge', () => {
      */
     const data = {
       nodes: [
-        { id: 'node-1', style: { parentId: 'combo-1' } },
-        { id: 'node-2', style: { parentId: 'combo-1' } },
+        { id: 'node-1', combo: 'combo-1' },
+        { id: 'node-2', combo: 'combo-1' },
         { id: 'node-3' },
         { id: 'node-4' },
         { id: 'node-5' },
@@ -285,5 +305,29 @@ describe('edge', () => {
       ],
       internal: [{ id: 'node-3-node-5', source: 'node-3', target: 'node-5' }],
     });
+  });
+
+  it('findActualConnectNodeData', () => {
+    expect(findActualConnectNodeData({ id: 'node-1' }, () => undefined).id).toBe('node-1');
+    expect(
+      findActualConnectNodeData({ id: 'node-1' }, (id) => {
+        if (id === 'node-1') return { id: 'node-2' };
+        return undefined;
+      }).id,
+    ).toBe('node-1');
+    expect(
+      findActualConnectNodeData({ id: 'node-1' }, (id) => {
+        if (id === 'node-1') return { id: 'node-2', style: { collapsed: true } };
+        if (id === 'node-2') return { id: 'node-3' };
+        return undefined;
+      }).id,
+    ).toBe('node-2');
+    expect(
+      findActualConnectNodeData({ id: 'node-1' }, (id) => {
+        if (id === 'node-1') return { id: 'node-2' };
+        if (id === 'node-2') return { id: 'node-3', style: { collapsed: true } };
+        return undefined;
+      }).id,
+    ).toBe('node-3');
   });
 });

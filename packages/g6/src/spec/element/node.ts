@@ -1,9 +1,8 @@
-import type { ID } from '@antv/graphlib';
+import type { AnimationOptions } from '../../animations/types';
 import type { BaseNodeStyleProps } from '../../elements/nodes';
-import type { CallableObject } from '../../types/callable';
+import type { Graph } from '../../runtime/graph';
 import type { NodeData } from '../data';
-import type { AnimationOptions } from './animation';
-import type { BaseElementStyle } from './base';
+import type { AnimationStage } from './animation';
 import type { PaletteOptions } from './palette';
 
 /**
@@ -13,23 +12,41 @@ import type { PaletteOptions } from './palette';
  */
 export interface NodeOptions {
   /**
+   * <zh/> 节点类型
+   *
+   * <en/> Node type
+   */
+  type?: string | ((this: Graph, datum: NodeData) => string);
+  /**
    * <zh/> 节点样式
    *
    * <en/> Node style
    */
-  style?: CallableObject<NodeStyle, NodeData>;
+  style?:
+    | NodeStyle
+    | ((this: Graph, data: NodeData) => NodeStyle)
+    | {
+        [K in keyof NodeStyle]: NodeStyle[K] | ((this: Graph, data: NodeData) => NodeStyle[K]);
+      };
   /**
    * <zh/> 节点状态样式
    *
    * <en/> Node state style
    */
-  state?: Record<string, CallableObject<NodeStyle, NodeData>>;
+  state?: Record<
+    string,
+    | NodeStyle
+    | ((this: Graph, data: NodeData) => NodeStyle)
+    | {
+        [K in keyof NodeStyle]: NodeStyle[K] | ((this: Graph, data: NodeData) => NodeStyle[K]);
+      }
+  >;
   /**
    * <zh/> 节点动画
    *
    * <en/> Node animation
    */
-  animation?: AnimationOptions;
+  animation?: false | Record<AnimationStage, false | string | AnimationOptions[]>;
   /**
    * <zh/> 色板
    *
@@ -41,11 +58,10 @@ export interface NodeOptions {
 export interface StaticNodeOptions {
   style?: NodeStyle;
   state?: Record<string, NodeStyle>;
-  animation?: AnimationOptions;
+  animation?: false | Record<AnimationStage, false | string | AnimationOptions[]>;
   palette?: PaletteOptions;
 }
 
-export interface NodeStyle extends BaseElementStyle, Partial<BaseNodeStyleProps> {
-  children?: ID[];
-  [key: string]: any;
+export interface NodeStyle extends Partial<BaseNodeStyleProps> {
+  [key: string]: unknown;
 }

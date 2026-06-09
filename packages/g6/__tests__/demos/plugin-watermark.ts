@@ -1,13 +1,12 @@
-import { Graph, PluginOptions } from '@/src';
 import data from '@@/dataset/cluster.json';
-import { isObject } from '@antv/util';
+import { Graph, PluginOptions } from '@antv/g6';
 
 export const pluginWatermark: TestCase = async (context) => {
   const graph = new Graph({
     ...context,
     autoResize: true,
     data,
-    layout: { type: 'd3force' },
+    layout: { type: 'd3-force' },
     plugins: [
       {
         type: 'watermark',
@@ -22,7 +21,7 @@ export const pluginWatermark: TestCase = async (context) => {
   function updatePlugin(type: string, config: object) {
     return (plugins: PluginOptions) => {
       return plugins.map((plugin) => {
-        if (isObject(plugin) && plugin.type === type) return { ...plugin, ...config };
+        if (typeof plugin === 'object' && plugin.type === type) return { ...plugin, ...config };
         return plugin;
       });
     };

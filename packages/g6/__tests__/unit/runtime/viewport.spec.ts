@@ -1,6 +1,6 @@
-import { controllerViewport } from '@/__tests__/demos/controller-viewport';
-import { viewportFit } from '@/__tests__/demos/viewport-fit';
 import { Graph } from '@/src';
+import { controllerViewport } from '@@/demos/controller-viewport';
+import { viewportFit } from '@@/demos/viewport-fit';
 import { createDemoGraph } from '@@/utils';
 import { AABB } from '@antv/g';
 
@@ -76,12 +76,12 @@ describe('ViewportController', () => {
 
   it('coordinate transform', async () => {
     expect(graph.getPosition()).toBeCloseTo([0, 0]);
-    expect(graph.getClientByCanvas([0, 0])).toBeCloseTo([0, 0]);
+    expect(graph.getClientByCanvas([0, 0])).toBeCloseTo([0, 0, 0]);
 
     expect(graph.getCanvasCenter()).toBeCloseTo([250, 250, 0]);
     expect(graph.getViewportCenter()).toBeCloseTo([250, 250, 0]);
-    expect(graph.getCanvasByViewport([0, 0])).toBeCloseTo([0, 0]);
-    expect(graph.getViewportByCanvas([0, 0])).toBeCloseTo([0, 0]);
+    expect(graph.getCanvasByViewport([0, 0])).toBeCloseTo([0, 0, 0]);
+    expect(graph.getViewportByCanvas([0, 0])).toBeCloseTo([0, 0, 0]);
 
     // without animation
     await graph.translateTo([100, 100]);
@@ -89,8 +89,8 @@ describe('ViewportController', () => {
     expect(graph.getPosition()).toBeCloseTo([100, 100]);
     expect(graph.getCanvasCenter()).toBeCloseTo([250, 250, 0]);
     expect(graph.getViewportCenter()).toBeCloseTo([250 - 100, 250 - 100, 0]);
-    expect(graph.getCanvasByViewport([0, 0])).toBeCloseTo([-100, -100]);
-    expect(graph.getViewportByCanvas([0, 0])).toBeCloseTo([100, 100]);
+    expect(graph.getCanvasByViewport([0, 0])).toBeCloseTo([-100, -100, 0]);
+    expect(graph.getViewportByCanvas([0, 0])).toBeCloseTo([100, 100, 0]);
   });
 
   it('getViewportSize', async () => {
@@ -108,6 +108,18 @@ describe('ViewportController', () => {
     await graph.zoomTo(2);
     // @ts-expect-error
     expect(graph.context.viewport.getBBoxInViewport(bbox).halfExtents).toBeCloseTo([100, 100, 0]);
+  });
+
+  it('isInViewport', async () => {
+    await graph.translateTo([100, 100]);
+    // @ts-expect-error
+    expect(graph.context.viewport?.isInViewport([0, 0])).toBe(false);
+    // @ts-expect-error
+    expect(graph.context.viewport?.isInViewport([100, 100])).toBe(true);
+    const bbox = new AABB();
+    bbox.setMinMax([0, 0, 0], [100, 100, 0]);
+    // @ts-expect-error
+    expect(graph.context.viewport?.isInViewport(bbox)).toBe(true);
   });
 });
 
@@ -227,5 +239,55 @@ describe('Viewport Fit with AutoFit and Padding with Animation', () => {
 
   it('default', async () => {
     await expect(graph).toMatchSnapshot(__filename, 'auto-fit-with-padding-animation');
+  });
+});
+
+describe('Viewport Fit with lineWidth', () => {
+  let graph: Graph;
+  beforeAll(async () => {
+    graph = await createDemoGraph(viewportFit, { padding: 10 });
+  });
+
+  afterAll(() => {
+    graph.destroy();
+  });
+
+  it('default', async () => {
+    graph.setNode({
+      ...graph.getOptions().node,
+      style: {
+        size: 50,
+        lineWidth: 5,
+        stroke: 'pink',
+        fill: (d: any) => (d.id === '1' ? '#d4414c' : '#2f363d'),
+      },
+    });
+    await graph.draw();
+    await graph.fitView();
+    await expect(graph).toMatchSnapshot(__filename, 'with-lineWidth');
+  });
+});
+
+describe('Fit View with no data in graph', () => {
+  let graph: Graph;
+
+  beforeAll(async () => {
+    graph = await createDemoGraph(async (context) => {
+      const graph = new Graph(context);
+      await graph.render();
+      return graph;
+    });
+  });
+
+  afterAll(() => {
+    graph.destroy();
+  });
+
+  it('fitView with no contents in the graph is ignored', () => {
+    // @ts-expect-error context is private.
+    const zoomBeforeFitView = graph.context.viewport?.getZoom();
+    graph.fitView();
+    // @ts-expect-error context is private.
+    expect(graph.context.viewport?.getZoom()).toBe(zoomBeforeFitView);
   });
 });

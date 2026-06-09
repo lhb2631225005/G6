@@ -1,19 +1,20 @@
 import { Polyline } from '@/src/elements/edges';
 import { Circle } from '@/src/elements/nodes';
-import { PortStyleProps } from '@/src/types';
+import { ID, PortStyleProps } from '@/src/types';
 import {
   findPorts,
   getAllPorts,
+  getBoundingPoints,
   getHexagonPoints,
   getPortConnectionPoint,
   getPortXYByPlacement,
-  getRectPoints,
   getStarPoints,
   getStarPorts,
   getTextStyleByPlacement,
   getTrianglePoints,
   getTrianglePorts,
   isEdge,
+  isElement,
   isNode,
   isSameNode,
   isSimplePort,
@@ -35,17 +36,32 @@ describe('element', () => {
     id: 'node-2',
   });
 
-  const edge = new Polyline({ style: { sourceNode: node1, targetNode: node2 } });
+  const context: any = {
+    element: {
+      getElement(id: ID) {
+        if (id === 'node-1') return node1;
+        else return node2;
+      },
+    },
+  };
+
+  const edge = new Polyline({ style: { sourceNode: 'node-1', targetNode: 'node-2' }, context });
 
   it('isNode', () => {
-    expect(isNode(new Rect({ style: { width: 10, height: 10 } }))).toBe(false);
+    const rect = new Rect({ style: { width: 10, height: 10 } });
+    expect(isNode(rect)).toBe(false);
+    expect(isElement(rect)).toBe(false);
     const node = new Circle({});
     expect(isNode(node)).toBe(true);
+    expect(isElement(node)).toBe(true);
   });
 
   it('isEdge', () => {
-    expect(isEdge(new Line({ style: { x1: 0, y1: 0, x2: 10, y2: 10 } }))).toBe(false);
+    const line = new Line({ style: { x1: 0, y1: 0, x2: 10, y2: 10 } });
+    expect(isEdge(line)).toBe(false);
+    expect(isElement(line)).toBe(false);
     expect(isEdge(edge)).toBe(true);
+    expect(isElement(edge)).toBe(true);
   });
 
   it('isSameNode', () => {
@@ -135,8 +151,8 @@ describe('element', () => {
     const sourcePortKey = 'left';
     const targetPortKey = 'top';
     const [sourcePort, targetPort] = findPorts(sourceNode, targetNode, sourcePortKey, targetPortKey);
-    expect((sourcePort as DisplayObject<PortStyleProps>)?.id).toEqual('port-left');
-    expect((targetPort as DisplayObject<PortStyleProps>)?.id).toEqual('port-top');
+    expect((sourcePort as DisplayObject<PortStyleProps>).className).toEqual('port-left');
+    expect((targetPort as DisplayObject<PortStyleProps>).className).toEqual('port-top');
   });
 
   it('getPortConnectionPoint', () => {
@@ -150,58 +166,50 @@ describe('element', () => {
         portLinkToCenter: true,
       },
     });
-    expect(getPortConnectionPoint(node.getPorts()['left'], [0, 0])).toEqual([88, 100, 0]);
+    expect(getPortConnectionPoint(node.getPorts()['left'], [0, 0])).toEqual([84, 100, 0]);
   });
 
   it('getTextStyleByPlacement', () => {
     expect(getTextStyleByPlacement(bbox, 'left')).toEqual({
-      x: 100,
-      y: 150,
+      transform: [['translate', 100, 150]],
       textAlign: 'right',
       textBaseline: 'middle',
     });
     expect(getTextStyleByPlacement(bbox, 'right')).toEqual({
-      x: 200,
-      y: 150,
+      transform: [['translate', 200, 150]],
       textAlign: 'left',
       textBaseline: 'middle',
     });
     expect(getTextStyleByPlacement(bbox, 'top')).toEqual({
-      x: 150,
-      y: 100,
+      transform: [['translate', 150, 100]],
       textAlign: 'center',
       textBaseline: 'bottom',
     });
     expect(getTextStyleByPlacement(bbox, 'bottom')).toEqual({
-      x: 150,
-      y: 200,
+      transform: [['translate', 150, 200]],
       textAlign: 'center',
       textBaseline: 'top',
     });
 
     expect(getTextStyleByPlacement(bbox, 'left-top')).toEqual({
-      x: 100,
-      y: 100,
+      transform: [['translate', 100, 100]],
       textAlign: 'right',
       textBaseline: 'bottom',
     });
     expect(getTextStyleByPlacement(bbox, 'right-bottom')).toEqual({
-      x: 200,
-      y: 200,
+      transform: [['translate', 200, 200]],
       textAlign: 'left',
       textBaseline: 'top',
     });
 
     expect(getTextStyleByPlacement(bbox, 'center')).toEqual({
-      x: 150,
-      y: 150,
+      transform: [['translate', 150, 150]],
       textAlign: 'center',
       textBaseline: 'middle',
     });
 
     expect(getTextStyleByPlacement(bbox)).toEqual({
-      x: 150,
-      y: 200,
+      transform: [['translate', 150, 200]],
       textAlign: 'center',
       textBaseline: 'top',
     });
@@ -251,9 +259,9 @@ describe('element', () => {
     });
   });
 
-  it('getRectPoints', () => {
-    expect(getRectPoints(100, 100).length).toBe(4);
-    expect(getRectPoints(100, 100)).toEqual([
+  it('getBoundingPoints', () => {
+    expect(getBoundingPoints(100, 100).length).toBe(4);
+    expect(getBoundingPoints(100, 100)).toEqual([
       [50, -50],
       [50, 50],
       [-50, 50],

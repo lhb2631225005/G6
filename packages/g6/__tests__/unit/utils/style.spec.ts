@@ -1,4 +1,4 @@
-import { computeElementCallbackStyle, zIndexOf } from '@/src/utils/style';
+import { computeElementCallbackStyle, getSubShapeStyle, mergeOptions } from '@/src/utils/style';
 
 describe('style', () => {
   it('computeElementCallbackStyle', () => {
@@ -20,7 +20,7 @@ describe('style', () => {
       fill: (data: any) => (data.data.type === 'B' ? 'green' : 'red'),
     };
 
-    const computedStyle = computeElementCallbackStyle(style, { datum, index: 0, elementData: [datum] });
+    const computedStyle = computeElementCallbackStyle(style, { datum, graph: {} as any });
 
     expect(computedStyle).toEqual({
       stroke: 'blue',
@@ -34,15 +34,29 @@ describe('style', () => {
       };
     };
 
-    expect(computeElementCallbackStyle(style1, { datum, index: 0, elementData: [datum] })).toEqual({
+    expect(computeElementCallbackStyle(style1, { datum, graph: {} as any })).toEqual({
       fill: 'red',
     });
   });
 
-  it('zIndexOf', () => {
-    expect(zIndexOf({ id: 'node-1' })).toBe(0);
-    expect(zIndexOf({ id: 'node-1', style: {} })).toBe(0);
-    expect(zIndexOf({ id: 'node-1', style: { zIndex: 1 } })).toBe(1);
-    expect(zIndexOf({ id: 'node-1', style: { zIndex: -1 } })).toBe(-1);
+  it('mergeOptions', () => {
+    expect(
+      mergeOptions(
+        { style: { a: 1, b: [1, 2], c: { d: 1 } }, id: '1' },
+        { style: { a: 2, b: [2, 3], c: { f: 1 } }, id: '2' },
+      ),
+    ).toEqual({ style: { a: 2, b: [2, 3], c: { f: 1 } }, id: '2' });
+  });
+
+  it('getSubShapeStyle', () => {
+    const style = {
+      x: 100,
+      y: 100,
+      class: 'node',
+      transform: [['translate', 100, 100]],
+      zIndex: 100,
+      fill: 'pink',
+    };
+    expect(getSubShapeStyle(style)).toEqual({ fill: 'pink' });
   });
 });

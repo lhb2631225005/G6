@@ -1,12 +1,12 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/cluster.json';
+import { Graph } from '@antv/g6';
 
 export const behaviorDragCanvas: TestCase = async (context) => {
   const graph = new Graph({
     ...context,
     data,
     layout: {
-      type: 'd3force',
+      type: 'd3-force',
     },
     node: {
       style: {
@@ -17,6 +17,7 @@ export const behaviorDragCanvas: TestCase = async (context) => {
       'drag-canvas',
       {
         type: 'drag-canvas',
+        key: 'drag-canvas',
         trigger: {
           up: ['ArrowUp'],
           down: ['ArrowDown'],

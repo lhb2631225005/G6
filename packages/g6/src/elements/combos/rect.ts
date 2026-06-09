@@ -1,38 +1,41 @@
 import type { DisplayObjectConfig, RectStyleProps as GRectStyleProps } from '@antv/g';
 import { Rect as GRect, Group } from '@antv/g';
-import { deepMix } from '@antv/util';
 import { subStyleProps } from '../../utils/prefix';
-import type { BaseComboStyleProps, ParsedBaseComboStyleProps } from './base-combo';
+import type { BaseComboStyleProps } from './base-combo';
 import { BaseCombo } from './base-combo';
 
-type KeyStyleProps = GRectStyleProps;
-export type RectComboStyleProps = BaseComboStyleProps<KeyStyleProps>;
-type ParsedRectComboStyleProps = ParsedBaseComboStyleProps<KeyStyleProps>;
-type RectComboOptions = DisplayObjectConfig<RectComboStyleProps>;
+/**
+ * <zh/> 矩形组合样式配置项
+ *
+ * <en/> Rect combo style props
+ */
+export interface RectComboStyleProps extends BaseComboStyleProps {}
 
+/**
+ * <zh/> 矩形组合
+ *
+ * <en/> Rect combo
+ */
 export class RectCombo extends BaseCombo<RectComboStyleProps> {
-  static defaultStyleProps: Partial<RectComboStyleProps> = {
-    anchor: [0.5, 0.5],
-  };
-
-  constructor(options: RectComboOptions) {
-    super(deepMix({}, { style: RectCombo.defaultStyleProps }, options));
+  constructor(options: DisplayObjectConfig<RectComboStyleProps>) {
+    super(options);
   }
 
-  protected drawKeyShape(attributes: ParsedRectComboStyleProps, container: Group): GRect | undefined {
+  protected drawKeyShape(attributes: Required<RectComboStyleProps>, container: Group): GRect | undefined {
     return this.upsert('key', GRect, this.getKeyStyle(attributes), container);
   }
 
-  protected getKeyStyle(attributes: ParsedRectComboStyleProps): GRectStyleProps {
+  protected getKeyStyle(attributes: Required<RectComboStyleProps>): GRectStyleProps {
     const keyStyle = super.getKeyStyle(attributes);
-    const collapsedStyle = subStyleProps(keyStyle, 'collapsed');
 
     const [width, height] = this.getKeySize(attributes);
     return {
       ...keyStyle,
-      ...(attributes.collapsed && collapsedStyle),
+      ...(attributes.collapsed && subStyleProps(keyStyle, 'collapsed')),
       width,
       height,
+      x: -width / 2,
+      y: -height / 2,
     };
   }
 }

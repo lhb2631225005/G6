@@ -1,3 +1,7 @@
-import type { Vector2, Vector3 } from './vector';
+export type Point = [number, number] | [number, number, number] | Float32Array;
 
-export type Point = Vector2 | Vector3;
+export type PointObject = {
+  x: number;
+  y: number;
+  z?: number;
+};

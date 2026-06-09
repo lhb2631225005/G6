@@ -2,34 +2,42 @@ import type { DisplayObjectConfig } from '@antv/g';
 import { ICON_SIZE_RATIO } from '../../constants/element';
 import type { Point } from '../../types';
 import { getHexagonPoints } from '../../utils/element';
-import type { IconStyleProps } from '../shapes';
-import type { ParsedPolygonStyleProps, PolygonStyleProps } from './polygon';
-import { Polygon } from './polygon';
+import type { IconStyleProps, PolygonStyleProps } from '../shapes';
+import { Polygon } from '../shapes/polygon';
 
-export type HexagonStyleProps = PolygonStyleProps & ExtendsStyleProps;
-type ParsedHexagonStyleProps = ParsedPolygonStyleProps & Required<HexagonStyleProps>;
-type ExtendsStyleProps = {
+/**
+ * <zh/> 六边形节点样式配置项
+ *
+ * <en/> Hexagon node style props
+ */
+export interface HexagonStyleProps extends PolygonStyleProps {
   /**
-   * <zh/> 外半径
-   * <en/> outer radius
+   * <zh/> 外半径，默认为宽高的最小值的一半
+   *
+   * <en/> outer radius, default is half of the minimum value of width and height
    */
   outerR?: number;
-};
+}
 
-export class Hexagon extends Polygon {
+/**
+ * <zh/> 六边形节点
+ *
+ * <en/> Hexagon node
+ */
+export class Hexagon extends Polygon<HexagonStyleProps> {
   constructor(options: DisplayObjectConfig<HexagonStyleProps>) {
     super(options);
   }
 
-  private getOuterR(attributes: ParsedHexagonStyleProps): number {
+  private getOuterR(attributes: Required<HexagonStyleProps>): number {
     return attributes.outerR || Math.min(...this.getSize(attributes)) / 2;
   }
 
-  protected getPoints(attributes: ParsedHexagonStyleProps): Point[] {
+  protected getPoints(attributes: Required<HexagonStyleProps>): Point[] {
     return getHexagonPoints(this.getOuterR(attributes));
   }
 
-  protected getIconStyle(attributes: ParsedHexagonStyleProps): false | IconStyleProps {
+  protected getIconStyle(attributes: Required<HexagonStyleProps>): false | IconStyleProps {
     const style = super.getIconStyle(attributes);
     const size = this.getOuterR(attributes) * ICON_SIZE_RATIO;
     return style ? ({ width: size, height: size, ...style } as IconStyleProps) : false;

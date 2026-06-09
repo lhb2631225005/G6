@@ -1,17 +1,17 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/cluster.json';
+import { Graph, iconfont } from '@antv/g6';
 
 export const pluginToolbarIconfont: TestCase = async (context) => {
   // Use iconfont for toolbar items.
   const iconFont = document.createElement('script');
-  iconFont.src = '//at.alicdn.com/t/font_8d5l8fzk5b87iudi.js';
+  iconFont.src = iconfont.js;
   document.head.appendChild(iconFont);
 
   const graph = new Graph({
     ...context,
     autoResize: true,
     data,
-    layout: { type: 'd3force' },
+    layout: { type: 'd3-force' },
     plugins: [
       {
         type: 'toolbar',

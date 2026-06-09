@@ -1,5 +1,5 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/cluster.json';
+import { Graph } from '@antv/g6';
 
 export const layoutGrid: TestCase = async (context) => {
   const graph = new Graph({
@@ -12,7 +12,7 @@ export const layoutGrid: TestCase = async (context) => {
     },
     layout: {
       type: 'grid',
-      sortBy: 'cluster',
+      sortBy: (d) => d.data.cluster,
     },
     behaviors: ['zoom-canvas', 'drag-canvas', 'drag-element', 'click-select'],
   });

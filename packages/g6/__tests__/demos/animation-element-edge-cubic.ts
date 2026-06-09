@@ -1,4 +1,4 @@
-import { Graph } from '@/src';
+import { Graph } from '@antv/g6';
 
 export const animationElementEdgeCubic: TestCase = async (context) => {
   const graph = new Graph({
@@ -20,8 +20,8 @@ export const animationElementEdgeCubic: TestCase = async (context) => {
       ],
     },
     edge: {
+      type: 'cubic',
       style: {
-        type: 'cubic',
         lineWidth: 2,
         stroke: '#1890FF',
         labelText: 'cubic-edge',

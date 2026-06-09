@@ -1,4 +1,4 @@
-import { Graph } from '@/src';
+import { Graph } from '@antv/g6';
 
 export const elementLabelOversized: TestCase = async (context) => {
   const data = {
@@ -8,7 +8,7 @@ export const elementLabelOversized: TestCase = async (context) => {
         data: {
           x: 100,
           y: 150,
-          label: `This label is too  long to be displayed`,
+          label: `This label with padding is too  long to be displayed`,
           size: 100,
         },
       },
@@ -17,7 +17,7 @@ export const elementLabelOversized: TestCase = async (context) => {
         data: {
           x: 400,
           y: 150,
-          label: 'This label is too long to be displayed',
+          label: 'This label with padding is too long to be displayed',
           size: 150,
         },
       },
@@ -38,8 +38,8 @@ export const elementLabelOversized: TestCase = async (context) => {
     ...context,
     data,
     node: {
+      type: 'rect',
       style: {
-        type: 'rect',
         x: (d) => d.data!.x as number,
         y: (d) => d.data!.y as number,
         size: (d) => d.data!.size as number,
@@ -50,6 +50,7 @@ export const elementLabelOversized: TestCase = async (context) => {
         labelBackgroundFill: '#eee',
         labelBackgroundFillOpacity: 0.5,
         labelBackgroundRadius: 4,
+        labelPadding: [0, 10, 0, 10],
         labelWordWrap: true,
         labelMaxLines: 4,
       },

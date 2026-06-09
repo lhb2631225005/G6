@@ -1,4 +1,4 @@
-import { Graph } from '@/src';
+import { Graph } from '@antv/g6';
 
 export const animationElementEdgeQuadratic: TestCase = async (context) => {
   const graph = new Graph({
@@ -17,8 +17,8 @@ export const animationElementEdgeQuadratic: TestCase = async (context) => {
       ],
     },
     edge: {
+      type: 'quadratic',
       style: {
-        type: 'quadratic',
         lineWidth: 2,
         stroke: '#1890FF',
         labelText: 'quadratic-edge',

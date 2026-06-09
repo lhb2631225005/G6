@@ -1,16 +1,16 @@
-import type { G6Spec } from '@/src';
-import { Graph, register } from '@/src';
 import data from '@@/dataset/soccer.json';
+import type { GraphOptions } from '@antv/g6';
+import { Graph, register } from '@antv/g6';
 
 export const layoutFruchtermanWASM: TestCase = async (context) => {
   const { FruchtermanLayout, initThreads, supportsThreads } = await import('@antv/layout-wasm');
 
-  register('layout', 'fruchterman-wasm', FruchtermanLayout);
+  register('layout', 'fruchterman-wasm', FruchtermanLayout as any);
 
   const supported = await supportsThreads();
   const threads = await initThreads(supported);
 
-  const options: G6Spec = {
+  const options: GraphOptions = {
     ...context,
     data,
     theme: 'light',

@@ -1,5 +1,5 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/radial.json';
+import { Graph } from '@antv/g6';
 
 export const layoutRadialSort: TestCase = async (context) => {
   const graph = new Graph({
@@ -24,7 +24,7 @@ export const layoutRadialSort: TestCase = async (context) => {
       linkDistance: 10,
       preventOverlap: true,
       nodeSize: 30,
-      sortBy: 'sortAttr2',
+      sortBy: (d) => d!.data.sortAttr2,
       sortStrength: 50,
     },
     behaviors: ['drag-canvas', 'drag-element'],

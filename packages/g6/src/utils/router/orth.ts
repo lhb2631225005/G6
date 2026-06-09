@@ -1,17 +1,20 @@
 import type { AABB } from '@antv/g';
 import { difference, isEqual } from '@antv/util';
-import type { Padding, Point } from '../../types';
+import type { Node, OrthRouterOptions, Point } from '../../types';
 import {
   getBBoxHeight,
   getBBoxWidth,
   getCombinedBBox,
-  getNearestPointToPoint,
+  getNearestBoundaryPoint,
+  getNearestBoundarySide,
   getNodeBBox,
+  isPointBBoxCenter,
   isPointInBBox,
+  isPointOnBBoxBoundary,
   isPointOutsideBBox,
 } from '../bbox';
 import { isOrthogonal, moveTo, round } from '../point';
-import { angle, distance, subtract, toVector3 } from '../vector';
+import { angle, distance, subtract, toVector2, toVector3 } from '../vector';
 
 export type Direction = 'N' | 'S' | 'W' | 'E' | null;
 
@@ -20,26 +23,35 @@ type Route = {
   direction: Direction;
 };
 
+const defaultOptions: OrthRouterOptions = {
+  padding: 10,
+};
+
 /**
- * <zh/> 获取两点之间的直角线段路径
+ * <zh/> 获取两点之间的正交线段路径
  *
- * <en/> Get the orthogonal line segment path between two points
+ * <en/> Get orthogonal line segments between two points
  * @param sourcePoint - <zh/> 起始点 | <en/> start point
  * @param targetPoint - <zh/> 终止点 | <en/> end point
- * @param sourceBBox - <zh/> 起始节点的包围盒 | <en/> bounding box of the start node
- * @param targetBBox - <zh/> 终止节点的包围盒 | <en/> bounding box of the end node
+ * @param sourceNode - <zh/> 起始节点 | <en/> source node
+ * @param targetNode - <zh/> 终止节点 | <en/> target node
  * @param controlPoints - <zh/> 控制点 | <en/> control points
- * @param padding - <zh/> 内边距 | <en/> padding
- * @returns <zh/> 直角线段路径 | <en/> orthogonal line segment path
+ * @param options - <zh/> 配置项 | <en/> options
+ * @returns <zh/> 路径点集 | <en/> vertices
  */
 export function orth(
   sourcePoint: Point,
   targetPoint: Point,
-  sourceBBox: AABB,
-  targetBBox: AABB,
+  sourceNode: Node,
+  targetNode: Node,
   controlPoints: Point[],
-  padding: Padding,
+  options: OrthRouterOptions,
 ) {
+  const { padding } = Object.assign(defaultOptions, options);
+
+  const sourceBBox = getNodeBBox(sourceNode, padding);
+  const targetBBox = getNodeBBox(targetNode, padding);
+
   const points: Point[] = [sourcePoint, ...controlPoints, targetPoint];
 
   // direction of previous route segment
@@ -59,6 +71,12 @@ export function orth(
         // source -> target
         if (sourceBBox.intersects(targetBBox)) {
           route = insideNode(from, to, sourceBBox, targetBBox);
+        } else if (!isPointBBoxCenter(from, sourceBBox) && !isPointBBoxCenter(to, targetBBox)) {
+          const fromWithPadding = getNearestBoundaryPoint(from, sourceBBox);
+          const toWithPadding = getNearestBoundaryPoint(to, targetBBox);
+          route = pointToPoint(fromWithPadding, toWithPadding, getDirection(fromWithPadding, toWithPadding));
+          route.points.unshift(fromWithPadding);
+          route.points.push(toWithPadding);
         } else if (!isOrth) {
           route = nodeToNode(from, to, sourceBBox, targetBBox);
         }
@@ -94,7 +112,7 @@ export function orth(
     if (toIdx < len - 1) result.push(to);
   }
 
-  return result;
+  return result.map(toVector2);
 }
 
 /**
@@ -179,9 +197,17 @@ export function pointToPoint(from: Point, to: Point, direction: Direction): Rout
  * @returns <zh/> 正交路由 | <en/> orthogonal route
  */
 export function nodeToPoint(from: Point, to: Point, fromBBox: AABB): Route {
-  const p = freeJoin(from, to, fromBBox);
+  if (isPointBBoxCenter(from, fromBBox)) {
+    const p = freeJoin(from, to, fromBBox);
 
-  return { points: [p], direction: getDirection(p, to) };
+    return { points: [p], direction: getDirection(p, to) };
+  } else {
+    const fromWithPadding = getNearestBoundaryPoint(from, fromBBox);
+    const isHorizontal = ['left', 'right'].includes(getNearestBoundarySide(from, fromBBox));
+    const p: Point = isHorizontal ? [to[0], fromWithPadding[1]] : [fromWithPadding[0], to[1]];
+
+    return { points: [p], direction: getDirection(p, to) };
+  }
 }
 
 /**
@@ -195,11 +221,13 @@ export function nodeToPoint(from: Point, to: Point, fromBBox: AABB): Route {
  * @returns <zh/> 正交路由 | <en/> orthogonal route
  */
 export function pointToNode(from: Point, to: Point, toBBox: AABB, direction: Direction): Route {
+  const toWithPadding = isPointBBoxCenter(to, toBBox) ? to : getNearestBoundaryPoint(to, toBBox);
   const points: Point[] = [
-    [to[0], from[1]],
-    [from[0], to[1]],
+    [toWithPadding[0], from[1]],
+    [from[0], toWithPadding[1]],
   ];
-  const freePoints = points.filter((p) => isPointOutsideBBox(p, toBBox));
+  const freePoints = points.filter((p) => isPointOutsideBBox(p, toBBox) && !isPointOnBBoxBoundary(p, toBBox, true));
+
   const freeDirectionPoints = freePoints.filter((p) => getDirection(p, from) !== direction);
 
   if (freeDirectionPoints.length > 0) {
@@ -243,8 +271,8 @@ export function nodeToNode(from: Point, to: Point, fromBBox: AABB, toBBox: AABB)
     const p2 = toVector3(route.points[0]);
 
     if (isPointInBBox(p2, fromBBox)) {
-      const fromBorder = moveTo(from, p2, getBBoxSize(fromBBox, getDirection(from, p2)) / 2);
-      const toBorder = moveTo(to, p1, getBBoxSize(toBBox, getDirection(to, p1)) / 2);
+      const fromBorder = moveTo(from, p1, getBBoxSize(fromBBox, getDirection(from, p1)) / 2);
+      const toBorder = moveTo(to, p2, getBBoxSize(toBBox, getDirection(to, p2)) / 2);
       const midPoint: Point = [(fromBorder[0] + toBorder[0]) / 2, (fromBorder[1] + toBorder[1]) / 2];
 
       const startRoute = nodeToPoint(from, midPoint, fromBBox);
@@ -254,6 +282,7 @@ export function nodeToNode(from: Point, to: Point, fromBBox: AABB, toBBox: AABB)
       route.direction = endRoute.direction;
     }
   }
+
   return route;
 }
 
@@ -281,10 +310,10 @@ export function insideNode(from: Point, to: Point, fromBBox: AABB, toBBox: AABB,
       start[0] + halfPerimeter * Math.cos(radians[direction]),
       start[1] + halfPerimeter * Math.sin(radians[direction]),
     ];
-    // `getNearestPointToPoint` returns a point on the boundary, so we need to move it a bit to ensure it's outside the element and then get the correct `p2` via `freeJoin`.
-    p1 = moveTo(getNearestPointToPoint(boundary, ref), ref, DEFAULT_OFFSET);
+    // `getNearestBoundaryPoint` returns a point on the boundary, so we need to move it a bit to ensure it's outside the element and then get the correct `p2` via `freeJoin`.
+    p1 = moveTo(getNearestBoundaryPoint(ref, boundary), ref, DEFAULT_OFFSET);
   } else {
-    p1 = moveTo(getNearestPointToPoint(boundary, start), start, -DEFAULT_OFFSET);
+    p1 = moveTo(getNearestBoundaryPoint(start, boundary), start, -DEFAULT_OFFSET);
   }
 
   let p2 = freeJoin(p1, end, boundary);
@@ -294,7 +323,7 @@ export function insideNode(from: Point, to: Point, fromBBox: AABB, toBBox: AABB,
   if (isEqual(round(p1), round(p2))) {
     const rad = angle(subtract(p1, start), [1, 0, 0]) + Math.PI / 2;
     p2 = [end[0] + halfPerimeter * Math.cos(rad), end[1] + halfPerimeter * Math.sin(rad), 0];
-    p2 = round(moveTo(getNearestPointToPoint(boundary, p2), end, -DEFAULT_OFFSET), 2);
+    p2 = round(moveTo(getNearestBoundaryPoint(p2, boundary), end, -DEFAULT_OFFSET), 2);
     const p3 = freeJoin(p1, p2, boundary);
     points = [p1, p3, p2];
   }

@@ -1,5 +1,5 @@
-import { elementEdgePolylineAnimation } from '@/__tests__/demos';
 import { type Graph } from '@/src';
+import { elementEdgePolylineAnimation } from '@@/demos';
 import { createDemoGraph } from '@@/utils';
 
 const updateEdgeStyle = (graph: Graph, id: string, attr: string, value: any) => {
@@ -45,7 +45,7 @@ describe('element edge polyline animation', () => {
   });
 
   it('Router', async () => {
-    updateEdgeStyle(graph, 'edge-1', 'router', true);
+    updateEdgeStyle(graph, 'edge-1', 'router', { type: 'orth' });
 
     await expect(graph).toMatchSnapshot(__filename, 'edge-polyline-router-has-controlPoints');
 

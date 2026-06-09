@@ -1,74 +1,125 @@
-import type { Graph } from '@/src';
-import type { AnimateEvent } from '@/src/utils/event';
+import type { Graph, IAnimateEvent } from '@/src';
+import type { CanvasLayer } from '@/src/types';
 import type { Canvas, IAnimation } from '@antv/g';
-import * as fs from 'fs';
-import * as path from 'path';
-import format from 'xml-formatter';
-import xmlserializer from 'xmlserializer';
+import chalk from 'chalk';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { optimize } from 'svgo';
+import { serializeToString } from 'xmlserializer';
 import { getSnapshotDir } from './dir';
 import { sleep } from './sleep';
 
+const format = (svg: SVGElement) => {
+  return optimize(serializeToString(svg as any), {
+    js2svg: {
+      pretty: true,
+      indent: 2,
+    },
+    plugins: [
+      'cleanupIds',
+      'cleanupAttrs',
+      'sortAttrs',
+      'sortDefsChildren',
+      'removeUselessDefs',
+      {
+        name: 'convertPathData',
+        params: {
+          floatPrecision: 4,
+          forceAbsolutePath: true,
+
+          applyTransforms: false,
+          applyTransformsStroked: false,
+          straightCurves: false,
+          convertToQ: false,
+          lineShorthands: false,
+          convertToZ: false,
+          curveSmoothShorthands: false,
+          smartArcRounding: false,
+          removeUseless: false,
+          collapseRepeated: false,
+          utilizeAbsolute: false,
+          negativeExtraSpace: false,
+        },
+      },
+      {
+        name: 'convertTransform',
+        params: {
+          floatPrecision: 4,
+
+          convertToShorts: false,
+          matrixToTransform: false,
+          shortTranslate: false,
+          shortScale: false,
+          shortRotate: false,
+          removeUseless: false,
+          collapseIntoOne: false,
+        },
+      },
+      {
+        name: 'cleanupNumericValues',
+        params: {
+          floatPrecision: 4,
+        },
+      },
+    ],
+  }).data;
+};
+
 export type ToMatchSVGSnapshotOptions = {
   fileFormat?: string;
-  keepSVGElementId?: boolean;
-};
-const formatSVG = (svg: string, keepSVGElementId: boolean) => {
-  return (keepSVGElementId ? svg : svg.replace(/id="[^"]*"/g, '').replace(/clip-path="[^"]*"/g, '')).replace(
-    '\r\n',
-    '\n',
-  );
 };
 
 // @see https://jestjs.io/docs/26.x/expect#expectextendmatchers
 export async function toMatchSVGSnapshot(
-  gCanvas: Canvas | Canvas[],
+  gCanvas: Record<CanvasLayer, Canvas>,
   dir: string,
   name: string,
   options: ToMatchSVGSnapshotOptions = {},
 ): Promise<{ message: () => string; pass: boolean }> {
   await sleep(300);
 
-  const { fileFormat = 'svg', keepSVGElementId = true } = options;
-  const namePath = path.join(dir, name);
-  const actualPath = path.join(dir, `${name}-actual.${fileFormat}`);
-  const expectedPath = path.join(dir, `${name}.${fileFormat}`);
-  const gCanvases = Array.isArray(gCanvas) ? gCanvas : [gCanvas];
+  const { fileFormat = 'svg' } = options;
+  const namePath = join(dir, name);
+  const actualPath = join(dir, `${name}-actual.${fileFormat}`);
+  const expectedPath = join(dir, `${name}.${fileFormat}`);
 
   let actual: string = '';
 
   // Clone <svg>
-  const svg = (gCanvases[0].getContextService().getDomElement() as unknown as SVGElement).cloneNode(true) as SVGElement;
+  const svg = (gCanvas.main.getContextService().getDomElement() as unknown as SVGElement).cloneNode(true) as SVGElement;
   const gRoot = svg.querySelector('#g-root');
 
-  gCanvases.slice(1).forEach((gCanvas) => {
+  // remove css style
+  svg.style.gridArea = '';
+
+  Object.entries(gCanvas).forEach(([key, gCanvas]) => {
+    if (key === 'main') return;
     const dom = (gCanvas.getContextService().getDomElement() as unknown as SVGElement).cloneNode(true) as SVGElement;
     // @ts-expect-error dom is SVGElement
     gRoot?.append(...(dom.querySelector('#g-root')?.childNodes || []));
   });
 
-  actual += svg
-    ? formatSVG(format(xmlserializer.serializeToString(svg as any), { indentation: '  ' }), keepSVGElementId)
-    : '';
+  actual += svg ? format(svg) : '';
 
   try {
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (!fs.existsSync(expectedPath)) {
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    if (!existsSync(expectedPath)) {
       if (process.env.CI === 'true') {
         throw new Error(`Please generate golden image for ${namePath}`);
       }
       console.warn(`! generate ${namePath}`);
-      fs.writeFileSync(expectedPath, actual);
+      writeFileSync(expectedPath, actual);
       return {
         message: () => `generate ${namePath}`,
         pass: true,
       };
     } else {
-      const expected = fs.readFileSync(expectedPath, {
+      const expected = readFileSync(expectedPath, {
         encoding: 'utf8',
         flag: 'r',
       });
       if (actual === expected) {
-        if (fs.existsSync(actualPath)) fs.unlinkSync(actualPath);
+        if (existsSync(actualPath)) unlinkSync(actualPath);
         return {
           message: () => `match ${namePath}`,
           pass: true,
@@ -76,9 +127,12 @@ export async function toMatchSVGSnapshot(
       }
 
       // Perverse actual file.
-      if (actual) fs.writeFileSync(actualPath, actual);
+      if (actual) writeFileSync(actualPath, actual);
+
+      const formatPath = (p: string) => p.split('/g6/')[1];
       return {
-        message: () => `mismatch ${namePath}`,
+        message: () =>
+          `mismatch: \n expected: ${chalk.green(formatPath(expectedPath))}\n received: ${chalk.red(formatPath(actualPath))}`,
         pass: false,
       };
     }
@@ -96,7 +150,7 @@ export async function toMatchSnapshot(
   detail?: string,
   options: ToMatchSVGSnapshotOptions = {},
 ) {
-  return await toMatchSVGSnapshot(Object.values(graph.getCanvas().canvas), ...getSnapshotDir(dir, detail), options);
+  return await toMatchSVGSnapshot(graph.getCanvas().getLayers(), ...getSnapshotDir(dir, detail), options);
 }
 
 export async function toMatchAnimation(
@@ -108,7 +162,7 @@ export async function toMatchAnimation(
   options: ToMatchSVGSnapshotOptions = {},
 ) {
   const animationPromise = new Promise<IAnimation>((resolve) => {
-    graph.once('beforeanimate', (e: AnimateEvent) => {
+    graph.once<IAnimateEvent>('beforeanimate', (e) => {
       resolve(e.animation!);
     });
   });
@@ -121,9 +175,10 @@ export async function toMatchAnimation(
 
   for (const frame of frames) {
     animation.currentTime = frame;
+
     await sleep(32);
     const result = await toMatchSVGSnapshot(
-      Object.values(graph.getCanvas().canvas),
+      graph.getCanvas().getLayers(),
       ...getSnapshotDir(dir, `${detail}-${frame}`),
       options,
     );

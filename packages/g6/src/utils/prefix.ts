@@ -1,4 +1,4 @@
-import { isString, lowerFirst, upperFirst } from '@antv/util';
+import { lowerFirst, upperFirst } from '@antv/util';
 import type { ReplacePrefix } from '../types';
 
 /**
@@ -51,14 +51,28 @@ export function removePrefix(string: string, prefix?: string, lowercaseFirstLett
  * @param prefix - <zh/> 子样式前缀 | <en/> sub style prefix
  * @returns <zh/> 子样式 | <en/> sub style
  */
-export function subStyleProps<T extends object>(style: object, prefix: string) {
-  return Object.entries(style).reduce((acc, [key, value]) => {
+export function subStyleProps<T extends Record<string, any>>(style: object, prefix: string) {
+  const subStyle = Object.entries(style).reduce((acc, [key, value]) => {
     if (key === 'className' || key === 'class') return acc;
     if (startsWith(key, prefix)) {
-      acc[removePrefix(key, prefix) as keyof T] = value;
+      Object.assign(acc, { [removePrefix(key, prefix)]: value });
     }
     return acc;
   }, {} as T);
+
+  // 向下传递透明度，但避免覆盖子样式中的透明度属性
+  // Pass down opacity, but avoid overwriting the opacity property in the sub-style
+  if ('opacity' in style) {
+    const subOpacityKey = addPrefix('opacity', prefix) as keyof typeof style;
+    const opacity = style.opacity as number;
+
+    if (subOpacityKey in style) {
+      const subOpacity = style[subOpacityKey] as number;
+      Object.assign(subStyle, { opacity: opacity * subOpacity });
+    } else Object.assign(subStyle, { opacity });
+  }
+
+  return subStyle;
 }
 
 /**
@@ -92,18 +106,19 @@ export function subObject(obj: Record<string, any>, prefix: string): Record<stri
  * @param prefix - <zh/> 子样式前缀 | <en/> sub style prefix
  * @returns <zh/> 排除子样式后的样式 | <en/> style without sub style
  */
-export function omitStyleProps<T extends object>(style: object, prefix: string | string[]) {
-  const prefixArray = isString(prefix) ? [prefix] : prefix;
-  return Object.entries(style).reduce((acc, [key, value]) => {
+export function omitStyleProps<T extends Record<string, any>>(style: Record<string, any>, prefix: string | string[]) {
+  const prefixArray = typeof prefix === 'string' ? [prefix] : prefix;
+  const omitStyle: Record<string, any> = {};
+  Object.keys(style).forEach((key) => {
     if (!prefixArray.find((p) => key.startsWith(p))) {
-      acc[key as keyof T] = value;
+      omitStyle[key] = style[key];
     }
-    return acc;
-  }, {} as T);
+  });
+  return omitStyle as T;
 }
 
 /**
- * <zh> 替换前缀
+ * <zh/> 替换前缀
  *
  * <en/> Replace prefix
  * @param style - <zh/> 样式 | <en/> style

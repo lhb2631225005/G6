@@ -19,7 +19,13 @@ module.exports = {
       },
     },
     {
-      files: ['**/__tests__/**'],
+      files: ['**/__tests__/**', '*.js', '*.mjs'],
+      rules: {
+        'jsdoc/require-jsdoc': 0,
+      },
+    },
+    {
+      files: ['./packages/g6/src/plugins/hull/!(index).ts', '*.js', '*.mjs', '*.ts'],
       rules: {
         'jsdoc/require-jsdoc': 0,
       },
@@ -28,6 +34,12 @@ module.exports = {
       files: ['**/demo-to-test/**'],
       rules: {
         '@typescript-eslint/no-var-requires': 'off',
+      },
+    },
+    {
+      files: ['./packages/site/**', './scripts/**'],
+      rules: {
+        'no-console': 'off',
       },
     },
   ],
@@ -45,11 +57,23 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': ['warn', { ignoreRestSiblings: true }],
     'jsdoc/require-param-type': 0,
     '@typescript-eslint/no-this-alias': 'off',
+    'no-console': 'error',
 
     // TODO: rules below will be set to 2 in the future
     'jsdoc/require-jsdoc': 1,
     'jsdoc/check-access': 1,
-    'jsdoc/check-tag-names': 1,
+    'jsdoc/valid-types': 0,
+    /**
+     * js plugin rules
+     */
+    'jsdoc/check-tag-names': [
+      'error',
+      {
+        // Allow TSDoc tags @remarks, @defaultValue
+        // Custom tags: @apiCategory for Graph API
+        definedTags: ['remarks', 'defaultValue', 'apiCategory'],
+      },
+    ],
     'jsdoc/require-description': 1,
     'jsdoc/require-param': 1,
     'jsdoc/check-param-names': 1,

@@ -1,12 +1,12 @@
-import { combo } from '@/__tests__/demos';
-import { type Graph } from '@/src';
-import { createDemoGraph } from '@@/utils';
+import type { Graph } from '@/src';
+import { elementCombo } from '@@/demos';
+import { createDemoGraph, createGraph } from '@@/utils';
 
 describe('combo', () => {
   let graph: Graph;
 
   beforeAll(async () => {
-    graph = await createDemoGraph(combo, { animation: false });
+    graph = await createDemoGraph(elementCombo, { animation: false });
   });
 
   afterAll(() => {
@@ -19,109 +19,43 @@ describe('combo', () => {
 
   it('collapse circle combo', async () => {
     const expandCombo = async () => {
-      graph.updateComboData([
-        {
-          id: 'combo-2',
-          style: {
-            collapsed: false,
-          },
-        },
-      ]);
-      await graph.render();
+      await graph.expandElement('combo-2');
     };
-    const collapseCombo = async (collapsedOrigin: any) => {
+    const collapseCombo = async () => {
       graph.updateComboData([
         {
           id: 'combo-2',
           style: {
-            collapsed: true,
-            collapsedOrigin,
             collapsedMarker: false,
           },
         },
       ]);
-      await graph.render();
+      await graph.collapseElement('combo-2');
     };
-    await collapseCombo('top');
-    await expect(graph).toMatchSnapshot(__filename, 'circle-collapse-top');
-    await expandCombo();
-    await collapseCombo('right');
-    await expect(graph).toMatchSnapshot(__filename, 'circle-collapse-right');
-    await collapseCombo('left');
-    await expect(graph).toMatchSnapshot(__filename, 'circle-collapse-left');
-    await expandCombo();
-    await collapseCombo('bottom');
-    await expect(graph).toMatchSnapshot(__filename, 'circle-collapse-bottom');
-    await expandCombo();
-    await collapseCombo('center');
+    await collapseCombo();
     await expect(graph).toMatchSnapshot(__filename, 'circle-collapse-center');
-    await expandCombo();
-    await collapseCombo('top-left');
-    await expect(graph).toMatchSnapshot(__filename, 'circle-collapse-topLeft');
-    await expandCombo();
-    await collapseCombo('top-right');
-    await expect(graph).toMatchSnapshot(__filename, 'circle-collapse-topRight');
-    await expandCombo();
-    await collapseCombo('bottom-left');
-    await expect(graph).toMatchSnapshot(__filename, 'circle-collapse-bottomLeft');
-    await expandCombo();
-    await collapseCombo('bottom-right');
-    await expect(graph).toMatchSnapshot(__filename, 'circle-collapse-bottomRight');
     await expandCombo();
   });
 
   it('collapse rect combo', async () => {
     const expandCombo = async () => {
-      graph.updateComboData([
-        {
-          id: 'combo-1',
-          style: {
-            type: 'rect',
-            collapsed: false,
-          },
-        },
-      ]);
-      await graph.render();
+      await graph.expandElement('combo-1');
     };
-    const collapseCombo = async (collapsedOrigin: any) => {
+    const collapseCombo = async () => {
       graph.updateComboData([
         {
           id: 'combo-1',
+          type: 'rect',
           style: {
-            type: 'rect',
-            collapsed: true,
-            collapsedOrigin,
             collapsedMarker: false,
           },
         },
       ]);
-      await graph.render();
+      await graph.collapseElement('combo-1');
     };
-    await collapseCombo('top');
-    await expect(graph).toMatchSnapshot(__filename, 'rect-collapse-top');
-    await expandCombo();
-    await collapseCombo('right');
-    await expect(graph).toMatchSnapshot(__filename, 'rect-collapse-right');
-    await collapseCombo('left');
-    await expect(graph).toMatchSnapshot(__filename, 'rect-collapse-left');
-    await expandCombo();
-    await collapseCombo('bottom');
-    await expect(graph).toMatchSnapshot(__filename, 'rect-collapse-bottom');
-    await expandCombo();
-    await collapseCombo('center');
+
+    await collapseCombo();
     await expect(graph).toMatchSnapshot(__filename, 'rect-collapse-center');
-    await expandCombo();
-    await collapseCombo('top-left');
-    await expect(graph).toMatchSnapshot(__filename, 'rect-collapse-topLeft');
-    await expandCombo();
-    await collapseCombo('top-right');
-    await expect(graph).toMatchSnapshot(__filename, 'rect-collapse-topRight');
-    await expandCombo();
-    await collapseCombo('bottom-left');
-    await expect(graph).toMatchSnapshot(__filename, 'rect-collapse-bottomLeft');
-    await expandCombo();
-    await collapseCombo('bottom-right');
-    await expect(graph).toMatchSnapshot(__filename, 'rect-collapse-bottomRight');
     await expandCombo();
   });
 
@@ -143,7 +77,6 @@ describe('combo', () => {
           id: 'combo-2',
           style: {
             collapsed: true,
-            collapsedOrigin: 'top',
             collapsedMarker: true,
             collapsedMarkerType: type,
           },
@@ -162,5 +95,90 @@ describe('combo', () => {
     await expandCombo();
     await collapseCombo((children: any) => children.length.toString() + 'nodes');
     await expect(graph).toMatchSnapshot(__filename, 'circle-marker-custom');
+  });
+});
+
+describe('combo drag zIndex', () => {
+  it('drag combo will bring related edges forward', async () => {
+    const graph = createGraph({
+      data: {
+        nodes: [
+          { id: 'node-1', combo: 'combo-2', style: { x: 120, y: 100 } },
+          { id: 'node-2', combo: 'combo-1', style: { x: 300, y: 200 } },
+          { id: 'node-3', combo: 'combo-1', style: { x: 200, y: 300 } },
+        ],
+        edges: [
+          { id: 'edge-1', source: 'node-1', target: 'node-2' },
+          { id: 'edge-2', source: 'node-2', target: 'node-3' },
+        ],
+        combos: [
+          {
+            id: 'combo-1',
+            type: 'rect',
+            combo: 'combo-2',
+          },
+          {
+            id: 'combo-2',
+          },
+        ],
+      },
+      edge: {
+        style: {
+          stroke: 'red',
+        },
+      },
+      combo: {
+        style: {
+          lineWidth: 1,
+          fillOpacity: 1,
+          stroke: 'black',
+        },
+      },
+    });
+
+    await graph.render();
+
+    await expect(graph).toMatchSnapshot(__filename, 'combo-zIndex');
+
+    await graph.frontElement('combo-1');
+
+    await expect(graph).toMatchSnapshot(__filename, 'combo-zIndex');
+
+    await graph.frontElement('combo-2');
+
+    await expect(graph).toMatchSnapshot(__filename, 'combo-zIndex');
+  });
+});
+
+describe('combo with position', () => {
+  it('combo with position', async () => {
+    const graph = createGraph({
+      data: {
+        nodes: [
+          { id: 'node-1', combo: 'combo-1', style: { x: 50, y: 100 } },
+          { id: 'node-2', combo: 'combo-2' },
+          { id: 'node-3', combo: 'combo-3' },
+        ],
+        combos: [
+          { id: 'combo-1', style: { x: 0, y: 0, collapsed: true } },
+          { id: 'combo-2', style: { x: 100, y: 100, collapsed: true } },
+          { id: 'combo-3', style: { collapsed: true } },
+        ],
+      },
+      node: {
+        style: {
+          labelText: (d) => d.id,
+        },
+      },
+      combo: {
+        style: {
+          labelText: (d) => d.id,
+        },
+      },
+    });
+
+    await graph.draw();
+
+    await expect(graph).toMatchSnapshot(__filename, 'combo-with-position');
   });
 });

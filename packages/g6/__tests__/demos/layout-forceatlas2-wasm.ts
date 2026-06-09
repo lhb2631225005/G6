@@ -1,15 +1,15 @@
-import type { G6Spec } from '@/src';
-import { Graph, register } from '@/src';
 import data from '@@/dataset/soccer.json';
+import type { GraphOptions } from '@antv/g6';
+import { Graph, register } from '@antv/g6';
 
 export const layoutForceatlas2WASM: TestCase = async (context) => {
   const { ForceAtlas2Layout, initThreads, supportsThreads } = await import('@antv/layout-wasm');
-  register('layout', 'forceatlas2-wasm', ForceAtlas2Layout);
+  register('layout', 'forceatlas2-wasm', ForceAtlas2Layout as any);
 
   const supported = await supportsThreads();
   const threads = await initThreads(supported);
 
-  const options: G6Spec = {
+  const options: GraphOptions = {
     ...context,
     data,
     theme: 'light',

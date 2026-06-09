@@ -1,48 +1,55 @@
 import type { DisplayObjectConfig } from '@antv/g';
 import { ICON_SIZE_RATIO } from '../../constants/element';
-import type { Point, StarPortPlacement } from '../../types';
+import type { NodePortStyleProps, Point, StarPortPlacement } from '../../types';
 import { getPortXYByPlacement, getStarPoints, getStarPorts } from '../../utils/element';
-import type { IconStyleProps } from '../shapes';
-import { NodePortStyleProps } from './base-node';
-import type { ParsedPolygonStyleProps, PolygonStyleProps } from './polygon';
-import { Polygon } from './polygon';
+import type { IconStyleProps, PolygonStyleProps } from '../shapes';
+import { Polygon } from '../shapes/polygon';
 
-export type StarStyleProps = PolygonStyleProps & ExtendsStyleProps;
-type ParsedStarStyleProps = ParsedPolygonStyleProps & Required<ExtendsStyleProps>;
-type ExtendsStyleProps = {
+/**
+ * <zh/> 五角星节点样式配置项
+ *
+ * <en/> Star node style props
+ */
+export interface StarStyleProps extends PolygonStyleProps {
   /**
-   * <zh/> 内半径
-   * <en/> Inner radius
+   * <zh/> 内半径，默认为外半径的 3/8
+   *
+   * <en/> Inner radius, default is 3/8 of the outer radius
    */
   innerR?: number;
-};
+}
 
-export class Star extends Polygon {
+/**
+ * <zh/> 五角星节点
+ *
+ * <en/> Star node
+ */
+export class Star extends Polygon<StarStyleProps> {
   constructor(options: DisplayObjectConfig<StarStyleProps>) {
     super(options);
   }
 
-  private getInnerR(attributes: ParsedStarStyleProps): number {
+  private getInnerR(attributes: Required<StarStyleProps>): number {
     return attributes.innerR || (this.getOuterR(attributes) * 3) / 8;
   }
 
-  private getOuterR(attributes: ParsedStarStyleProps): number {
+  private getOuterR(attributes: Required<StarStyleProps>): number {
     return Math.min(...this.getSize(attributes)) / 2;
   }
 
-  protected getPoints(attributes: ParsedStarStyleProps): Point[] {
+  protected getPoints(attributes: Required<StarStyleProps>): Point[] {
     return getStarPoints(this.getOuterR(attributes), this.getInnerR(attributes));
   }
 
-  protected getIconStyle(attributes: ParsedStarStyleProps): false | IconStyleProps {
+  protected getIconStyle(attributes: Required<StarStyleProps>): false | IconStyleProps {
     const style = super.getIconStyle(attributes);
     const size = this.getInnerR(attributes) * 2 * ICON_SIZE_RATIO;
     return style ? ({ width: size, height: size, ...style } as IconStyleProps) : false;
   }
 
-  protected getPortXY(attributes: ParsedStarStyleProps, style: NodePortStyleProps): Point {
+  protected getPortXY(attributes: Required<StarStyleProps>, style: NodePortStyleProps): Point {
     const { placement = 'top' } = style;
-    const bbox = this.getKey().getLocalBounds();
+    const bbox = this.getShape('key').getLocalBounds();
     const ports = getStarPorts(this.getOuterR(attributes), this.getInnerR(attributes));
     return getPortXYByPlacement(bbox, placement as StarPortPlacement, ports, false);
   }

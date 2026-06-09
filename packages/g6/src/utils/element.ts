@@ -1,46 +1,56 @@
 import type { AABB, DisplayObject, TextStyleProps } from '@antv/g';
-import { get, isString } from '@antv/util';
+import { get, isNumber, isString, set } from '@antv/util';
 import { BaseCombo, BaseEdge, BaseNode } from '../elements';
-import type { NodePortStyleProps } from '../elements/nodes/base-node';
-import type { TriangleDirection } from '../elements/nodes/triangle';
-import type { Combo, Edge, Node, Placement, Point, Position } from '../types';
-import type { LabelPlacement, Port } from '../types/node';
+import type { BaseShape, BaseShapeStyleProps } from '../elements/shapes';
+import type { Combo, Edge, Element, Node, NodePortStyleProps, Placement, Point, TriangleDirection } from '../types';
+import type { NodeLabelStyleProps, Port } from '../types/node';
 import { getBBoxHeight, getBBoxWidth } from './bbox';
 import { isPoint } from './is';
 import { findNearestPoints, getEllipseIntersectPoint } from './point';
 import { getXYByPlacement } from './position';
 
 /**
- * <zh/> 判断是否是 BaseNode 的实例
+ * <zh/> 判断是否是 Node 的实例
  *
- * <en/> Judge whether the instance is BaseNode
+ * <en/> Judge whether the instance is Node
  * @param shape - <zh/> 实例 | <en/> instance
- * @returns <zh/> 是否是 BaseNode 的实例 | <en/> whether the instance is BaseNode
+ * @returns <zh/> 是否是 Node 的实例 | <en/> whether the instance is Node
  */
 export function isNode(shape: DisplayObject | Port): shape is Node {
   return shape instanceof BaseNode && shape.type === 'node';
 }
 
 /**
- * <zh/> 判断是否是 BaseEdge 的实例
+ * <zh/> 判断是否是 Edge 的实例
  *
- * <en/> Judge whether the instance is BaseEdge
+ * <en/> Judge whether the instance is Edge
  * @param shape - <zh/> 实例 | <en/> instance
- * @returns <zh/> 是否是 BaseEdge 的实例 | <en/> whether the instance is BaseEdge
+ * @returns <zh/> 是否是 Edge 的实例 | <en/> whether the instance is Edge
  */
 export function isEdge(shape: DisplayObject): shape is Edge {
   return shape instanceof BaseEdge;
 }
 
 /**
- * <zh/> 判断是否是 BaseCombo 的实例
+ * <zh/> 判断是否是 Combo 的实例
  *
- * <en/> Judge whether the instance is BaseCombo
+ * <en/> Judge whether the instance is Combo
  * @param shape - <zh/> 实例 | <en/> instance
- * @returns <zh/> 是否是 BaseCombo 的实例 | <en/> whether the instance is BaseCombo
+ * @returns <zh/> 是否是 Combo 的实例 | <en/> whether the instance is Combo
  */
-export function isCombo(shape: DisplayObject): shape is Combo {
+export function isCombo(shape: any): shape is Combo {
   return shape instanceof BaseCombo;
+}
+
+/**
+ * <zh/> 判断是否是 Element 的实例
+ *
+ * <en/> Judge whether the instance is Element
+ * @param shape - <zh/> 实例 | <en/> instance
+ * @returns <zh/> 是否是 Element 的实例 | <en/> whether the instance is Element
+ */
+export function isElement(shape: any): shape is Element {
+  return isNode(shape) || isEdge(shape) || isCombo(shape);
 }
 
 /**
@@ -61,6 +71,14 @@ const PORT_MAP: Record<string, Point> = {
   right: [1, 0.5],
   bottom: [0.5, 1],
   left: [0, 0.5],
+  'left-top': [0, 0],
+  'top-left': [0, 0],
+  'left-bottom': [0, 1],
+  'bottom-left': [0, 1],
+  'right-top': [1, 0],
+  'top-right': [1, 0],
+  'right-bottom': [1, 1],
+  'bottom-right': [1, 1],
   default: [0.5, 0.5],
 };
 
@@ -68,18 +86,18 @@ const PORT_MAP: Record<string, Point> = {
  * Get the Port x, y by `position`.
  * @param bbox - BBox of element.
  * @param placement - The position relative with element.
- * @param ports - The map of position.
+ * @param portMap - The map of position.
  * @param isRelative - Whether the position in MAP is relative.
  * @returns [x, y]
  */
 export function getPortXYByPlacement(
   bbox: AABB,
   placement?: Placement,
-  ports: Record<string, Point> = PORT_MAP,
+  portMap: Record<string, Point> = PORT_MAP,
   isRelative = true,
 ): Point {
   const DEFAULT = [0.5, 0.5];
-  const p: [number, number] = isString(placement) ? get(ports, placement.toLocaleLowerCase(), DEFAULT) : placement;
+  const p: [number, number] = isString(placement) ? get(portMap, placement.toLocaleLowerCase(), DEFAULT) : placement;
 
   if (!isRelative && isString(placement)) return p;
 
@@ -95,6 +113,7 @@ export function getPortXYByPlacement(
  * @returns <zh/> 所有连接桩 | <en/> All Ports
  */
 export function getAllPorts(node: Node): Record<string, Port> {
+  if (!node) return {};
   // 1. 需要绘制的连接桩 | Get the ports that need to be drawn
   const ports = node.getPorts();
 
@@ -103,7 +122,7 @@ export function getAllPorts(node: Node): Record<string, Port> {
   portsStyle.forEach((portStyle: NodePortStyleProps, i: number) => {
     const { key, placement } = portStyle;
     if (isSimplePort(portStyle)) {
-      ports[key || i] ||= getXYByPlacement(node.getKey().getBounds(), placement);
+      ports[key || i] ||= getXYByPlacement(node.getShape('key').getBounds(), placement);
     }
   });
   return ports;
@@ -128,8 +147,8 @@ export function isSimplePort(portStyle: NodePortStyleProps): boolean {
  * @param port - <zh/> 连接桩 | <en/> Port
  * @returns <zh/> 连接桩的位置 | <en/> Port Position
  */
-export function getPortPosition(port: Port): Position {
-  return isPoint(port) ? port : port.getPosition();
+export function getPortPosition(port: Port): Point {
+  return isPoint(port) ? port : (port.getPosition() as Point);
 }
 
 /**
@@ -157,13 +176,13 @@ export function findPorts(
  * <zh/> 查找节点上的最有可能连接的连接桩
  *
  * <en/> Find the most likely connected port on the node
- * @description
+ * @remarks
  * 1. If `portKey` is specified, return the port.
  * 2. If `portKey` is not specified, return the port closest to the opposite connection points.
  * 3. If the node has no ports, return undefined.
  * @param node - <zh/> 节点 | <en/> Node
  * @param oppositeNode - <zh/> 对端节点 | <en/> Opposite Node
- * @param portKey - <zh/> 连接桩的 key | <en/> Port Key
+ * @param portKey - <zh/> 连接桩的键值（key） | <en/> Port Key
  * @param oppositePortKey - <zh/> 对端连接桩的 key | <en/> Opposite Port Key
  * @returns <zh/> 连接桩 | <en/> Port
  */
@@ -184,15 +203,15 @@ export function findPort(node: Node, oppositeNode: Node, portKey?: string, oppos
  * <zh/> 寻找节点上所有可能的连接点
  *
  * <en/> Find all possible connection points on the node
- * @description
+ * @remarks
  * 1. If `portKey` is specified, return the position of the port.
  * 2. If `portKey` is not specified, return positions of all ports.
  * 3. If the node has no ports, return the center of the node.
  * @param node - <zh/> 节点 | <en/> Node
- * @param portKey
+ * @param portKey - <zh/> 连接桩的键值（key），如不指定则返回所有 | <en/> Port Key, return all if not specified
  * @returns <zh/> 连接点 | <en/> Connection Point
  */
-function findConnectionPoints(node: Node, portKey?: string): Position[] {
+function findConnectionPoints(node: Node, portKey?: string): Point[] {
   const allPortsMap = getAllPorts(node);
   if (portKey) return [getPortPosition(allPortsMap[portKey])];
   const oppositePorts = Object.values(allPortsMap);
@@ -207,8 +226,10 @@ function findConnectionPoints(node: Node, portKey?: string): Position[] {
  * @param opposite - <zh/> 对端的具体点或节点 | <en/> Opposite Point or Node
  * @returns <zh/> 连接点 | <en/> Connection Point
  */
-export function getConnectionPoint(node: Port | Node, opposite: Node | Port): Point {
-  return isNode(node) ? getNodeConnectionPoint(node, opposite) : getPortConnectionPoint(node, opposite);
+export function getConnectionPoint(node: Port | Node | Combo, opposite: Node | Port): Point {
+  return isCombo(node) || isNode(node)
+    ? getNodeConnectionPoint(node, opposite)
+    : getPortConnectionPoint(node, opposite);
 }
 
 /**
@@ -217,17 +238,18 @@ export function getConnectionPoint(node: Port | Node, opposite: Node | Port): Po
  * <en/> Get the connection point of the port
  * @param port - <zh/> 连接桩 | <en/> Port
  * @param opposite - <zh/> 对端的具体点或节点 | <en/> Opposite Point or Node
- * @param oppositePort - <zh/> 对端连接桩 | <en/> Opposite Port
+ * // @param oppositePort - <zh/> 对端连接桩 | <en/> Opposite Port
  * @returns <zh/> 连接桩的连接点 | <en/> Port Point
  */
 export function getPortConnectionPoint(port: Port, opposite: Node | Port): Point {
+  if (!port || !opposite) return [0, 0, 0];
   if (isPoint(port)) return port;
 
   // 1. linkToCenter 为 true，则返回连接桩的中心 | If linkToCenter is true, return the center of the port
-  if (port.attributes.linkToCenter) return port.getPosition();
+  if (port.attributes.linkToCenter) return port.getPosition() as Point;
 
-  // 2. 推导对端的具体点：如果是连接桩，则返回连接桩的中心；如果是节点，则返回节点的中心；如果是具体点则直接返回
-  // 2. Derive the specific point of the opposite: if it is a port, return the center of the port; if it is a node, return the center of the node; if it is a specific point, return directly
+  // 2. 推导对端的具体点：如果是连接桩或节点，则返回它的中心；如果是具体点，则直接返回
+  // 2. Get a specific opposite point: if it is a port or a node, return its center; if it is a specific point, return directly
   const oppositePosition = isPoint(opposite)
     ? opposite
     : isNode(opposite)
@@ -235,56 +257,63 @@ export function getPortConnectionPoint(port: Port, opposite: Node | Port): Point
       : opposite.getPosition();
 
   // 3. 返回连接桩边界上的交点 | Return the intersection point on the port boundary
-  return getEllipseIntersectPoint(oppositePosition, port.getBounds());
+  return getEllipseIntersectPoint(oppositePosition as Point, port.getBounds());
 }
 
 /**
  * <zh/> 获取节点的连接点
  *
  * <en/> Get the Node Connection Point
- * @param node - <zh/> 节点 | <en/> Node
+ * @param nodeLike - <zh/> 节点或组合 | <en/> Node or Combo
  * @param opposite - <zh/> 对端的具体点或节点 | <en/> Opposite Point or Node
- * @param oppositePort - <zh/> 对端连接桩 | <en/> Opposite Port
+ * // @param oppositePort - <zh/> 对端连接桩 | <en/> Opposite Port
  * @returns <zh/> 节点的连接点 | <en/> Node Point
  */
-export function getNodeConnectionPoint(node: Node, opposite: Node | Port): Point {
+export function getNodeConnectionPoint(nodeLike: Node | Combo, opposite: Node | Port): Point {
+  if (!nodeLike || !opposite) return [0, 0, 0];
   const oppositePosition = isPoint(opposite)
     ? opposite
     : isNode(opposite)
       ? opposite.getCenter()
-      : opposite.getPosition();
-  return node.getIntersectPoint(oppositePosition) || node.getCenter();
+      : (opposite.getPosition() as Point);
+  return nodeLike.getIntersectPoint(oppositePosition) || nodeLike.getCenter();
 }
 
 /**
  * Get the Text style by `position`.
  * @param bbox - BBox of element.
  * @param placement - The position relative with element.
+ * @param offsetX - The offset x.
+ * @param offsetY - The offset y.
  * @param isReverseBaseline - Whether reverse the baseline.
  * @returns Partial<TextStyleProps>
  */
 export function getTextStyleByPlacement(
   bbox: AABB,
-  placement: LabelPlacement = 'bottom',
+  placement: NodeLabelStyleProps['placement'] = 'bottom',
+  offsetX: number = 0,
+  offsetY: number = 0,
   isReverseBaseline = false,
 ): Partial<TextStyleProps> {
   const direction = placement.split('-');
   const [x, y] = getXYByPlacement(bbox, placement);
 
-  const textAlign = direction.includes('left') ? 'right' : direction.includes('right') ? 'left' : 'center';
+  const [top, bottom]: TextStyleProps['textBaseline'][] = isReverseBaseline ? ['bottom', 'top'] : ['top', 'bottom'];
 
-  let textBaseline: TextStyleProps['textBaseline'] = direction.includes('top')
-    ? 'bottom'
+  const textBaseline: TextStyleProps['textBaseline'] = direction.includes('top')
+    ? bottom
     : direction.includes('bottom')
-      ? 'top'
+      ? top
       : 'middle';
-  if (isReverseBaseline) {
-    textBaseline = textBaseline === 'top' ? 'bottom' : textBaseline === 'bottom' ? 'top' : textBaseline;
-  }
+
+  const textAlign: TextStyleProps['textAlign'] = direction.includes('left')
+    ? 'right'
+    : direction.includes('right')
+      ? 'left'
+      : 'center';
 
   return {
-    x,
-    y,
+    transform: [['translate', x + offsetX, y + offsetY]],
     textBaseline,
     textAlign,
   };
@@ -416,7 +445,7 @@ export function getTrianglePorts(width: number, height: number, direction: Trian
  * @param height - <zh/> 高度 | <en/> height
  * @returns <zh/> 矩形的顶点 | <en/> The points of a rectangle
  */
-export function getRectPoints(width: number, height: number): Point[] {
+export function getBoundingPoints(width: number, height: number): Point[] {
   return [
     [width / 2, -height / 2],
     [width / 2, height / 2],
@@ -451,6 +480,26 @@ export function isVisible(element: DisplayObject) {
 }
 
 /**
+ * <zh/> 设置元素属性（优化性能）
+ *
+ * <en/> Set element attributes (optimize performance)
+ * @param element - <zh/> 元素 | <en/> element
+ * @param style - <zh/> 样式 | <en/> style
+ */
+export function setAttributes(element: BaseShape<any>, style: Partial<BaseShapeStyleProps> & Record<string, any>) {
+  const { zIndex, transform, transformOrigin, visibility, cursor, clipPath, component, ...rest } = style;
+  Object.assign(element.attributes, rest);
+
+  if (transform) element.setAttribute('transform', transform);
+  if (isNumber(zIndex)) element.setAttribute('zIndex', zIndex);
+  if (transformOrigin) element.setAttribute('transformOrigin', transformOrigin);
+  if (visibility) element.setAttribute('visibility', visibility);
+  if (cursor) element.setAttribute('cursor', cursor);
+  if (clipPath) element.setAttribute('clipPath', clipPath);
+  if (component) element.setAttribute('component', component);
+}
+
+/**
  * <zh/> 更新图形样式
  *
  * <en/> Update shape style
@@ -476,4 +525,25 @@ export function getHexagonPoints(outerR: number): Point[] {
     [(-outerR * Math.sqrt(3)) / 2, -outerR / 2],
     [(-outerR * Math.sqrt(3)) / 2, outerR / 2],
   ];
+}
+
+/**
+ * <zh/> 将图形标记为即将销毁，用于在 element controller 中识别要销毁的元素
+ *
+ * <en/> Mark the element as to be destroyed, used to identify the element to be destroyed in the element controller
+ * @param element - <zh/> 图形 | <en/> element
+ */
+export function markToBeDestroyed(element: DisplayObject) {
+  set(element, '__to_be_destroyed__', true);
+}
+
+/**
+ * <zh/> 判断图形是否即将销毁
+ *
+ * <en/> Determine whether the element is to be destroyed
+ * @param element - <zh/> 图形 | <en/> element
+ * @returns <zh/> 是否即将销毁 | <en/> whether the element is to be destroyed
+ */
+export function isToBeDestroyed(element: DisplayObject | unknown) {
+  return get(element, '__to_be_destroyed__', false);
 }

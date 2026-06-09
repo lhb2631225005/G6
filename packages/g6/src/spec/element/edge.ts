@@ -1,8 +1,8 @@
+import type { AnimationOptions } from '../../animations/types';
 import type { BaseEdgeStyleProps } from '../../elements/edges';
-import type { CallableObject } from '../../types/callable';
+import type { Graph } from '../../runtime/graph';
 import type { EdgeData } from '../data';
-import type { AnimationOptions } from './animation';
-import type { BaseElementStyle } from './base';
+import type { AnimationStage } from './animation';
 import type { PaletteOptions } from './palette';
 
 /**
@@ -12,23 +12,41 @@ import type { PaletteOptions } from './palette';
  */
 export interface EdgeOptions {
   /**
+   * <zh/> 边类型
+   *
+   * <en/> Edge type
+   */
+  type?: string | ((this: Graph, datum: EdgeData) => string);
+  /**
    * <zh/> 边样式
    *
    * <en/> Edge style
    */
-  style?: CallableObject<EdgeStyle, EdgeData>;
+  style?:
+    | EdgeStyle
+    | ((this: Graph, data: EdgeData) => EdgeStyle)
+    | {
+        [K in keyof EdgeStyle]: EdgeStyle[K] | ((this: Graph, data: EdgeData) => EdgeStyle[K]);
+      };
   /**
    * <zh/> 边状态样式
    *
    * <en/> Edge state style
    */
-  state?: Record<string, CallableObject<EdgeStyle, EdgeData>>;
+  state?: Record<
+    string,
+    | EdgeStyle
+    | ((this: Graph, data: EdgeData) => EdgeStyle)
+    | {
+        [K in keyof EdgeStyle]: EdgeStyle[K] | ((this: Graph, data: EdgeData) => EdgeStyle[K]);
+      }
+  >;
   /**
    * <zh/> 边动画
    *
    * <en/> Edge animation
    */
-  animation?: AnimationOptions;
+  animation?: false | Record<AnimationStage, false | string | AnimationOptions[]>;
   /**
    * <zh/> 色板
    *
@@ -40,10 +58,10 @@ export interface EdgeOptions {
 export interface StaticEdgeOptions {
   style?: EdgeStyle;
   state?: Record<string, EdgeStyle>;
-  animation?: AnimationOptions;
+  animation?: false | Record<AnimationStage, false | string | AnimationOptions[]>;
   palette?: PaletteOptions;
 }
 
-export interface EdgeStyle extends BaseElementStyle, Partial<BaseEdgeStyleProps> {
-  [key: string]: any;
+export interface EdgeStyle extends Partial<BaseEdgeStyleProps> {
+  [key: string]: unknown;
 }

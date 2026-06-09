@@ -1,6 +1,5 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/cluster.json';
-import { isObject } from '@antv/util';
+import { Graph } from '@antv/g6';
 
 export const pluginLegend: TestCase = async (context) => {
   const { nodes, edges } = data;
@@ -22,19 +21,19 @@ export const pluginLegend: TestCase = async (context) => {
         };
       }),
     },
-    layout: { type: 'd3force' },
-    behaviors: ['drag-canvas', 'drag-element'],
+    layout: { type: 'd3-force' },
+    behaviors: ['drag-canvas', 'drag-element', 'zoom-canvas'],
     node: {
+      type: (item: any) => {
+        if (item.data.cluster === 'a') return 'diamond';
+        if (item.data.cluster === 'b') return 'rect';
+        if (item.data.cluster === 'c') return 'triangle';
+        return 'circle';
+      },
       style: {
         labelText: (d) => d.id,
         lineWidth: 0,
-        type: (item: any) => {
-          if (item.data.cluster === 'a') return 'diamond';
-          if (item.data.cluster === 'b') return 'rect';
-          if (item.data.cluster === 'c') return 'triangle';
-          return 'circle';
-        },
-        color: (item: any) => {
+        fill: (item: any) => {
           if (item.data.cluster === 'a') return 'red';
           if (item.data.cluster === 'b') return 'blue';
           if (item.data.cluster === 'c') return 'green';
@@ -67,7 +66,7 @@ export const pluginLegend: TestCase = async (context) => {
         .onChange((trigger: string) => {
           graph.setPlugins((plugins) =>
             plugins.map((plugin) => {
-              if (isObject(plugin) && plugin.type === 'legend') return { ...plugin, trigger };
+              if (typeof plugin === 'object' && plugin.type === 'legend') return { ...plugin, trigger };
               return plugin;
             }),
           );

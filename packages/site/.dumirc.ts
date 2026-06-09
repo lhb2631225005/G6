@@ -1,27 +1,37 @@
 import { defineConfig } from 'dumi';
-import { homepage, repository, version } from './package.json';
+import { version } from '../g6/package.json';
+import { homepage, repository } from './package.json';
 
 export default defineConfig({
+  ...(process.env.NODE_ENV === 'production' ? { ssr: { builder: 'webpack', mako: false } } : { ssr: false, mako: {} }),
   locales: [
     { id: 'zh', name: '中文' },
     { id: 'en', name: 'English' },
   ],
-  title: 'G6', // 网站header标题
   favicons: ['https://mdn.alipayobjects.com/huamei_qa8qxu/afts/img/A*7svFR6wkPMoAAAAAAAAAAAAADmJ7AQ/original'], // 网站 favicon
   metas: [
     // 自定义 meta 标签
-    { name: 'keywords', content: 'G6' },
     {
-      name: 'description',
-      content: 'A collection of charts made with the Grammar of Graphics',
+      name: 'google-site-verification',
+      content: 'D2DFQzn8bn6vTvIqonu0FSFoF-y5ZihUR9WYteGI684',
     },
   ],
   themeConfig: {
-    title: 'G6',
-    description: 'A collection of charts made with the Grammar of Graphics',
+    title: 'G6', // 网站header标题
+    metas: {
+      title: { zh: 'G6 图可视化引擎', en: 'G6 Graph Visualization Framework in JavaScript' },
+      description: {
+        zh: 'G6 是一个简单、易用、完备的图可视化引擎，它在高定制能力的基础上，提供了一系列设计优雅、便于使用的图可视化解决方案。能帮助开发者搭建属于自己的图可视化、图分析、或图编辑器应用。',
+        en: 'G6 is a graph visualization framework with simplicity and convenience. Based on the ability of customization, it provides elegant graph visualization solutions, helping developers build applications for graph visualization, analysis, and editing.',
+      },
+    },
+    ai: {
+      recommend: 'https://assets.antv.antgroup.com/g6/recommend.json',
+    },
     defaultLanguage: 'zh', // 默认语言
     isAntVSite: false, // 是否是 AntV 的大官网
     siteUrl: homepage, // 官网地址
+    sitePackagePath: 'packages/site', // 站点包地址
     githubUrl: repository.url, // GitHub 地址
     footerTheme: 'light', // 白色 底部主题
     showSearch: true, // 是否显示搜索框
@@ -31,49 +41,51 @@ export default defineConfig({
     showLanguageSwitcher: true, // 是否显示官网语言切换
     showWxQrcode: true, // 是否显示头部菜单的微信公众号
     showChartResize: true, // 是否在 demo 页展示图表视图切换
-    showAPIDoc: true, // 是否在 demo 页展示API文档
-    themeSwitcher: 'g2',
+    showAPIDoc: false, // 是否在 demo 页展示API文档
+    feedback: true, // 是否显示反馈组件
+    links: true, // 是否显示links答疑小蜜
     prefersColor: {
       default: 'light',
       switch: false,
     },
     versions: {
       // 历史版本以及切换下拉菜单
-      [version]: 'https://g6-next.antv.antgroup.com',
-      '4.x': 'https://g6.antv.antgroup.com',
+      [version]: 'https://g6.antv.antgroup.com',
+      '4.x': 'https://g6-v4.antv.vision',
       '3.2.x': 'https://g6-v3-2.antv.vision',
     },
     docsearchOptions: {
       // 头部搜索框配置
       apiKey: '9d1cd586972bb492b7b41b13a949ef30',
       indexName: 'antv_g6',
+      sort: ['!/api/reference'],
     },
     navs: [
       {
-        slug: 'docs/manual/introduction',
+        slug: 'docs/manual',
         title: {
-          zh: '教程',
-          en: 'Manual',
+          zh: '文档',
+          en: 'Docs',
         },
       },
       {
-        slug: 'examples',
-        title: {
-          zh: '示例',
-          en: 'Examples',
-        },
-      },
-      {
-        slug: 'docs/apis',
+        slug: 'docs/api',
         title: {
           zh: 'API',
           en: 'API',
         },
       },
       {
+        slug: 'examples',
         title: {
-          zh: '其他资源',
-          en: 'Online Tools',
+          zh: '图表示例',
+          en: 'Playground',
+        },
+      },
+      {
+        title: {
+          zh: '社区',
+          en: 'Community',
         },
         dropdownItems: [
           {
@@ -87,145 +99,141 @@ export default defineConfig({
             url: 'https://g6.antv.antgroup.com',
             name: {
               zh: '国内镜像',
-              en: 'China Site',
+              en: 'Site in China',
             },
           },
         ],
       },
     ],
-    ecosystems: [
-      // 头部的菜单中的「周边生态」
-    ],
     docs: [
+      // Docs folder
       {
-        slug: 'manual/v5',
+        slug: 'manual/getting-started',
         title: {
-          zh: '🎉 新版本 5.0',
-          en: '🎉 New v5.0',
+          zh: '开始使用',
+          en: 'Getting Started',
         },
-        order: 4,
+        order: 2,
       },
       {
-        slug: 'manual/tutorial',
+        slug: 'manual/getting-started/integration',
         title: {
-          zh: '入门教程',
-          en: 'Tutorial',
+          zh: '前端框架集成',
+          en: 'Integration',
+        },
+        order: 2,
+      },
+      {
+        slug: 'manual/graph',
+        title: {
+          zh: '图 Graph',
+          en: 'Graph',
+        },
+        order: 3,
+      },
+      {
+        slug: 'manual/element',
+        title: {
+          zh: '元素 Element',
+          en: 'Element',
         },
         order: 5,
       },
       {
-        slug: 'manual/advanced',
+        slug: 'manual/element/node',
         title: {
-          zh: '进阶教程',
-          en: 'Advanced',
-        },
-        order: 6,
-      },
-      {
-        slug: 'manual/customize',
-        title: {
-          zh: '自定义扩展',
-          en: 'Customzing Extensions',
-        },
-        order: 7,
-      },
-      // ==========API====================
-      {
-        slug: 'apis/reference',
-        title: {
-          zh: 'API 文档',
-          en: 'API Reference',
-        },
-        order: 1,
-      },
-      {
-        slug: 'apis/data',
-        title: {
-          zh: '数据',
-          en: 'Data',
-        },
-        order: 2,
-      },
-      {
-        slug: 'apis/graph',
-        title: {
-          zh: '图实例',
-          en: 'Graph',
-        },
-        order: 2,
-      },
-      {
-        slug: 'apis/item',
-        title: {
-          zh: '元素',
-          en: 'Elements',
-        },
-      },
-      {
-        slug: 'apis/item/node',
-        title: {
-          zh: '节点',
+          zh: '节点 Node',
           en: 'Node',
         },
         order: 3,
       },
       {
-        slug: 'apis/item/edge',
+        slug: 'manual/element/edge',
         title: {
-          zh: '边',
+          zh: '边 Edge',
           en: 'Edge',
         },
         order: 4,
       },
       {
-        slug: 'apis/item/combo',
+        slug: 'manual/element/combo',
         title: {
-          zh: 'Combo',
+          zh: '组合 Combo',
           en: 'Combo',
         },
         order: 5,
       },
       {
-        slug: 'apis/shape',
+        slug: 'manual/element/shape',
         title: {
-          zh: '图形',
+          zh: '图形 Shape',
           en: 'Shape',
         },
         order: 6,
       },
       {
-        slug: 'apis/layout',
+        slug: 'manual/layout',
         title: {
-          zh: '布局',
-          en: 'layout',
+          zh: '布局 Layout',
+          en: 'Layout',
+        },
+        order: 5,
+      },
+      {
+        slug: 'manual/behavior',
+        title: {
+          zh: '交互 Behavior',
+          en: 'Behavior',
+        },
+        order: 6,
+      },
+      {
+        slug: 'manual/plugin',
+        title: {
+          zh: '插件 Plugin',
+          en: 'Plugin',
         },
         order: 7,
       },
       {
-        slug: 'apis/behaviors',
+        slug: 'manual/transform',
         title: {
-          zh: '交互',
-          en: 'Interaction',
+          zh: '数据处理 Transform',
+          en: 'Transform',
         },
         order: 8,
       },
       {
-        slug: 'apis/plugins',
+        slug: 'manual/theme',
         title: {
-          zh: '自由插件',
-          en: 'Plugin',
+          zh: '主题 Theme',
+          en: 'Theme',
         },
         order: 9,
       },
-    ],
-    tutorials: [
       {
-        slug: 'manual/about',
+        slug: 'manual/animation',
         title: {
-          zh: '关于',
-          en: 'About',
+          zh: '动画 Animation',
+          en: 'Animation',
         },
-        order: 1,
+        order: 10,
+      },
+      {
+        slug: 'manual/further-reading',
+        title: {
+          zh: '扩展阅读',
+          en: 'Further Reading',
+        },
+        order: 11,
+      },
+      {
+        slug: 'manual/whats-new',
+        title: {
+          zh: '版本特性',
+          en: "What's new",
+        },
+        order: 12,
       },
     ],
     examples: [
@@ -233,20 +241,20 @@ export default defineConfig({
         slug: 'feature',
         icon: 'gallery',
         title: {
-          zh: '5.0 新能力',
-          en: '5.0 Features',
+          zh: '特性',
+          en: 'Feature',
         },
       },
       {
-        slug: 'case',
+        slug: 'scene-case',
         icon: 'gallery',
         title: {
           zh: '场景案例',
-          en: 'Case',
+          en: 'Scene Case',
         },
       },
       {
-        slug: 'net',
+        slug: 'layout',
         icon: 'net',
         title: {
           zh: '图布局',
@@ -254,23 +262,23 @@ export default defineConfig({
         },
       },
       {
-        slug: 'item',
+        slug: 'element',
         icon: 'shape',
         title: {
           zh: '元素',
-          en: 'Item',
+          en: 'Element',
         },
       },
       {
-        slug: 'interaction',
+        slug: 'behavior',
         icon: 'interaction',
         title: {
           zh: '交互',
-          en: 'Interaction',
+          en: 'Behavior',
         },
       },
       {
-        slug: 'scatter',
+        slug: 'animation',
         icon: 'scatter',
         title: {
           zh: '动画',
@@ -278,18 +286,34 @@ export default defineConfig({
         },
       },
       {
-        slug: 'tool',
+        slug: 'plugin',
         icon: 'tool',
         title: {
-          zh: '组件',
-          en: 'Component',
+          zh: '插件',
+          en: 'Plugin',
+        },
+      },
+      {
+        slug: 'transform',
+        icon: 'tag-flow',
+        title: {
+          zh: '数据处理',
+          en: 'Transform',
+        },
+      },
+      {
+        slug: 'algorithm',
+        icon: 'gallery',
+        title: {
+          zh: '算法',
+          en: 'Algorithm',
         },
       },
       {
         slug: 'performance',
         icon: 'net',
         title: {
-          zh: '性能测试',
+          zh: '性能',
           en: 'Performance',
         },
       },
@@ -299,9 +323,19 @@ export default defineConfig({
       splitPaneMainSize: '62%',
     },
     playground: {},
+    /** 公告 */
     announcement: {
-      zh: '',
-      en: '',
+      title: {
+        zh: 'AntV 首个声明式信息图渲染框架正式开源，让数据叙事更简单、更优雅、更高效，现诚邀体验共建！',
+        en: "AntV's declarative infographic framework is now open source. Simpler, more elegant data storytelling!",
+      },
+      link: {
+        url: 'https://infographic.antv.vision/',
+        text: {
+          zh: '点击了解详情',
+          en: 'Learn More',
+        },
+      },
     },
     /** 首页技术栈介绍 */
     detail: {
@@ -329,45 +363,26 @@ export default defineConfig({
             zh: '开始使用',
             en: 'Getting Started',
           },
-          link: `/manual/introduction`,
+          link: {
+            zh: '/manual/introduction',
+            en: '/en/manual/introduction',
+          },
         },
         {
           text: {
             zh: '图表示例',
-            en: 'Examples',
+            en: 'Playground',
           },
-          link: `/examples`,
+          link: {
+            zh: '/examples',
+            en: '/en/examples',
+          },
           type: 'primary',
         },
       ],
     },
     /** 新闻公告，优先选择配置的，如果没有配置则使用远程的！ */
-    news: [
-      {
-        type: {
-          zh: '推荐',
-          en: 'News',
-        },
-        title: {
-          zh: 'G6 5.0-beta 闪亮登场',
-          en: 'G6 5.0-beta is released!',
-        },
-        date: '2023.08.31',
-        link: 'https://zhuanlan.zhihu.com/p/653709725?',
-      },
-      {
-        type: {
-          zh: '推荐',
-          en: 'News',
-        },
-        title: {
-          zh: '图可视分析与搭建平台 GraphInsight 开源',
-          en: 'GraphInsight is opened source!',
-        },
-        date: '2022.11.22',
-        link: 'https://www.yuque.com/antv/blog/nyl5bkhdkicgm7v8',
-      },
-    ],
+    // news: [] // 统一使用 site-data 配置
     /** 首页特性介绍 */
     features: [
       {
@@ -389,7 +404,7 @@ export default defineConfig({
         },
         description: {
           zh: '扎根实际具体业务场景、结合业界领先成果，沉淀顶尖解决方案',
-          en: 'According to practical bussiness scenarios, we found out the top solutions',
+          en: 'According to practical business scenarios, we found out the top solutions',
         },
       },
       {
@@ -400,7 +415,7 @@ export default defineConfig({
         },
         description: {
           zh: 'Vivid, 精心设计的简单、灵活、高可拓展的接口，满足你的无限创意',
-          en: 'Well-designed simple, flexible, and extendable intefaces will satisfy your infinite originality',
+          en: 'Well-designed simple, flexible, and extendable interfaces will satisfy your infinite originality',
         },
       },
     ],
@@ -478,7 +493,7 @@ export default defineConfig({
         img: 'https://gw.alipayobjects.com/mdn/rms_2274c3/afts/img/A*1l8-TqUr7UcAAAAAAAAAAABkARQnAQ',
       },
       {
-        name: '网上银行',
+        name: '网商银行',
         img: 'https://gw.alipayobjects.com/mdn/rms_2274c3/afts/img/A*ZAKFQJ5Bz4MAAAAAAAAAAABkARQnAQ',
       },
       {
@@ -494,14 +509,24 @@ export default defineConfig({
         img: 'https://gw.alipayobjects.com/mdn/rms_2274c3/afts/img/A*TgV-RZDODJIAAAAAAAAAAABkARQnAQ',
       },
     ],
+    /** 死链检查配置  */
+    deadLinkChecker: {
+      checkExternalLinks: false, // 是否检查外部链接
+    },
+    /** 站点地图配置 */
+    sitemap: {},
   },
   mfsu: false,
   alias: {
     '@': __dirname,
+    '@antv/g6': require.resolve('../g6/src/index.ts'),
+    '@antv/g6-extension-3d': require.resolve('../g6-extension-3d/src/index.ts'),
+    '@antv/g6-extension-react': require.resolve('../g6-extension-react/src/index.ts'),
   },
   links: [],
   jsMinifier: 'terser',
   analytics: {
     ga_v2: 'G-YLQBGDK1GT',
   },
+  headScripts: ['https://cdn.jsdelivr.net/npm/lil-gui@0.19'],
 });

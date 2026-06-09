@@ -3,7 +3,7 @@ import type { TreeData } from '../types';
 import { dfs } from './traverse';
 
 type TreeDataGetter = {
-  getNodeData?: (datum: TreeData) => NodeData;
+  getNodeData?: (datum: TreeData, depth: number) => NodeData;
   getEdgeData?: (source: TreeData, target: TreeData) => EdgeData;
   getChildren?: (datum: TreeData) => TreeData[];
 };
@@ -18,10 +18,11 @@ type TreeDataGetter = {
  */
 export function treeToGraphData(treeData: TreeData, getter?: TreeDataGetter): GraphData {
   const {
-    getNodeData = (datum: TreeData) => {
-      if (!datum.children) return datum;
-      const { children, style = {}, ...restDatum } = datum;
-      return { style: { ...style, children: children.map((child) => child.id) }, ...restDatum } as NodeData;
+    getNodeData = (datum: TreeData, depth: number) => {
+      datum.depth = depth;
+      if (!datum.children) return datum as NodeData;
+      const { children, ...restDatum } = datum;
+      return { ...restDatum, children: children.map((child) => child.id) } as NodeData;
     },
     getEdgeData = (source: TreeData, target: TreeData) => ({ source: source.id, target: target.id }),
     getChildren = (datum: TreeData) => datum.children || [],
@@ -32,8 +33,8 @@ export function treeToGraphData(treeData: TreeData, getter?: TreeDataGetter): Gr
 
   dfs(
     treeData,
-    (node) => {
-      nodes.push(getNodeData(node));
+    (node, depth) => {
+      nodes.push(getNodeData(node, depth));
       const children = getChildren(node);
       for (const child of children) {
         edges.push(getEdgeData(node, child));

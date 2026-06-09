@@ -1,5 +1,5 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/cluster.json';
+import { Graph } from '@antv/g6';
 
 export const layoutFruchtermanBasic: TestCase = async (context) => {
   const graph = new Graph({
@@ -15,6 +15,7 @@ export const layoutFruchtermanBasic: TestCase = async (context) => {
       type: 'fruchterman',
       gravity: 5,
       speed: 5,
+      nodeClusterBy: 'data.cluster',
     },
     behaviors: ['drag-canvas', 'drag-element'],
   });

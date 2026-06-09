@@ -1,14 +1,13 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/cluster.json';
-import { isObject } from '@antv/util';
+import { Graph } from '@antv/g6';
 
 export const pluginGridLine: TestCase = async (context) => {
   const graph = new Graph({
     ...context,
     autoResize: true,
     data,
-    layout: { type: 'd3force' },
-    behaviors: ['drag-canvas'],
+    layout: { type: 'd3-force' },
+    behaviors: ['drag-canvas', 'zoom-canvas'],
     plugins: [{ type: 'grid-line', follow: false }],
   });
 
@@ -32,7 +31,7 @@ export const pluginGridLine: TestCase = async (context) => {
         .onChange((follow: boolean) => {
           graph.setPlugins((plugins) =>
             plugins.map((plugin) => {
-              if (isObject(plugin) && plugin.type === 'grid-line') return { ...plugin, follow };
+              if (typeof plugin === 'object' && plugin.type === 'grid-line') return { ...plugin, follow };
               return plugin;
             }),
           );
@@ -43,7 +42,7 @@ export const pluginGridLine: TestCase = async (context) => {
         .onChange((size: number) => {
           graph.setPlugins((plugins) =>
             plugins.map((plugin) => {
-              if (isObject(plugin) && plugin.type === 'grid-line') return { ...plugin, size };
+              if (typeof plugin === 'object' && plugin.type === 'grid-line') return { ...plugin, size };
               return plugin;
             }),
           );

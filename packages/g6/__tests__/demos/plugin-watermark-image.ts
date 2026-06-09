@@ -1,12 +1,12 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/cluster.json';
+import { Graph } from '@antv/g6';
 
 export const pluginWatermarkImage: TestCase = async (context) => {
   const graph = new Graph({
     ...context,
     autoResize: true,
     data,
-    layout: { type: 'd3force' },
+    layout: { type: 'd3-force' },
     plugins: [
       {
         type: 'watermark',

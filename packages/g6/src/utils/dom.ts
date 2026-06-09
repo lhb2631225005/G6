@@ -24,7 +24,9 @@ function getContainerSize(container: HTMLElement): [number, number] {
  * @param container container of Graph
  * @returns Size of Graph
  */
-export function sizeOf(container: HTMLElement): [number, number] {
+export function sizeOf(container: HTMLElement | null): [number, number] {
+  if (!container) return [0, 0];
+
   let effectiveWidth = 640;
   let effectiveHeight = 480;
 
@@ -41,62 +43,4 @@ export function sizeOf(container: HTMLElement): [number, number] {
     Math.max(isNumber(effectiveWidth) ? effectiveWidth : MIN_CHART_WIDTH, MIN_CHART_WIDTH),
     Math.max(isNumber(effectiveHeight) ? effectiveHeight : MIN_CHART_HEIGHT, MIN_CHART_HEIGHT),
   ];
-}
-
-/**
- * Create a plugin DOM element.
- * @param type - plugin type
- * @param cover - cover the container
- * @returns plugin DOM element
- */
-export function createPluginContainer(type: string, cover = true) {
-  const el = document.createElement('div');
-
-  el.setAttribute('class', `g6-${type}`);
-
-  el.style.position = 'absolute';
-  el.style.display = 'block';
-
-  if (cover) {
-    el.style.top = '0px';
-    el.style.left = '0px';
-    el.style.height = '100%';
-    el.style.width = '100%';
-    el.style.overflow = 'hidden';
-    el.style.pointerEvents = 'none';
-  }
-
-  return el;
-}
-
-/**
- * Create a DOM element, if exists, remove it and create a new one.
- * @param id - id
- * @param tag - tag
- * @param style - style
- * @param innerHTML - innerHTML
- * @param container - container
- * @returns new DOM element
- */
-export function insertDOM(
-  id: string,
-  tag = 'div',
-  style: Partial<CSSStyleDeclaration> = {},
-  innerHTML = '',
-  container: HTMLElement = document.body,
-) {
-  // 如果存在则删除
-  const dom = document.getElementById(id);
-  if (dom) dom.remove();
-
-  // 重新创建
-  const div = document.createElement(tag);
-  div.innerHTML = innerHTML;
-  div.id = id;
-
-  Object.assign(div.style, style);
-
-  container.appendChild(div);
-
-  return div;
 }

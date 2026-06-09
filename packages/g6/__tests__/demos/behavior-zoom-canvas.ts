@@ -1,12 +1,12 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/cluster.json';
+import { Graph } from '@antv/g6';
 
 export const behaviorZoomCanvas: TestCase = async (context) => {
   const graph = new Graph({
     ...context,
     data,
     layout: {
-      type: 'd3force',
+      type: 'd3-force',
     },
     node: {
       style: {

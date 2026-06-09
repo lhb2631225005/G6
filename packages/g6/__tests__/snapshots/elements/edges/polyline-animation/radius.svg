@@ -1,26 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500" style="background: transparent; position: absolute; outline: none;" color-interpolation-filters="sRGB" tabindex="1">
-  <defs/>
-  <g id="g-svg-camera" transform="matrix(1,0,0,1,0,0)">
-    <g id="g-root" fill="none" transform="matrix(1,0,0,1,0,0)">
-      <g id="g-svg-7" fill="none" transform="matrix(1,0,0,1,0,0)"/>
-      <g id="g-svg-6" fill="none" transform="matrix(1,0,0,1,0,0)">
-        <g id="edge-1" fill="none" marker-start="false" marker-end="false" transform="matrix(1,0,0,1,0,0)">
-          <g id="edge-1" fill="none" marker-start="false" marker-end="false" stroke="transparent" stroke-width="3"/>
-          <g transform="matrix(1,0,0,1,211.940445,129.764801)">
-            <path id="key" fill="none" d="M 0,69.04115371726718 L 69.87773553566194,62.05338016370098 Q 88.05955371748013 60.235198345519166,96.39288705081344 48.56853167885251 L 96.39288705081344,48.56853167885251 L 131.08469539285096,0" stroke-width="1" stroke="rgba(153,173,209,1)"/>
-            <path id="key" fill="none" d="M 0,68.70588235294117 L 128.82352941176472,0" stroke-width="3" stroke="transparent"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500" color-interpolation-filters="sRGB" style="background: transparent; outline: none;" tabindex="1">
+  <g>
+    <g fill="none">
+      <g fill="none" class="elements">
+        <g fill="none">
+          <g>
+            <path fill="none" stroke="rgba(153,173,209,1)" stroke-width="1" d="m215.9206 198.408 65.8976-6.5898q18.1818-1.8182 26.5151-13.4849l0 0 32.3669-45.3136" class="key"/>
+            <path fill="none" stroke="transparent" stroke-width="3" d="m214.1176 192.4706 121.7648-64.9412" class="key"/>
           </g>
         </g>
-      </g>
-      <g id="g-svg-5" fill="none" transform="matrix(1,0,0,1,0,0)">
-        <g id="node-1" fill="none" transform="matrix(1,0,0,1,200,200)">
-          <g transform="matrix(1,0,0,1,0,0)">
-            <circle id="key" fill="rgba(23,131,255,1)" transform="translate(-12,-12)" cx="12" cy="12" r="12"/>
+        <g fill="none" transform="matrix(1 0 0 1 200 200)">
+          <g>
+            <circle r="16" fill="rgba(23,131,255,1)" stroke="rgba(0,0,0,1)" stroke-width="0" class="key"/>
           </g>
         </g>
-        <g id="node-2" fill="none" transform="matrix(1,0,0,1,350,120)">
-          <g transform="matrix(1,0,0,1,0,0)">
-            <circle id="key" fill="rgba(23,131,255,1)" transform="translate(-12,-12)" cx="12" cy="12" r="12"/>
+        <g fill="none" transform="matrix(1 0 0 1 350 120)">
+          <g>
+            <circle r="16" fill="rgba(23,131,255,1)" stroke="rgba(0,0,0,1)" stroke-width="0" class="key"/>
           </g>
         </g>
       </g>

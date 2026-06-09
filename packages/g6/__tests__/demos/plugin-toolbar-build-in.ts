@@ -1,12 +1,12 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/cluster.json';
+import { Graph } from '@antv/g6';
 
 export const pluginToolbarBuildIn: TestCase = async (context) => {
   const graph = new Graph({
     ...context,
     autoResize: true,
     data,
-    layout: { type: 'd3force' },
+    layout: { type: 'd3-force' },
     plugins: [
       {
         type: 'toolbar',
@@ -16,15 +16,15 @@ export const pluginToolbarBuildIn: TestCase = async (context) => {
         },
         getItems: () => {
           return [
-            { id: 'zoom-in', value: 'zoom-in' },
-            { id: 'zoom-out', value: 'zoom-out' },
-            { id: 'redo', value: 'redo' },
-            { id: 'undo', value: 'undo' },
-            { id: 'edit', value: 'edit' },
-            { id: 'delete', value: 'delete' },
-            { id: 'auto-fit', value: 'auto-fit' },
-            { id: 'export', value: 'export' },
-            { id: 'reset', value: 'reset' },
+            { id: 'zoom-in', value: 'zoom-in', title: 'Zoom in' },
+            { id: 'zoom-out', value: 'zoom-out', title: 'Zoom out' },
+            { id: 'redo', value: 'redo', title: 'Redo' },
+            { id: 'undo', value: 'undo', title: 'Undo' },
+            { id: 'edit', value: 'edit', title: 'Edit' },
+            { id: 'delete', value: 'delete', title: 'Delete' },
+            { id: 'auto-fit', value: 'auto-fit', title: 'Auto fit' },
+            { id: 'export', value: 'export', title: 'Export' },
+            { id: 'reset', value: 'reset', title: 'Reset' },
           ];
         },
       },

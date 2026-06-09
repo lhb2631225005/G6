@@ -1,9 +1,8 @@
-import type { ID } from '@antv/graphlib';
+import type { AnimationOptions } from '../../animations/types';
 import type { BaseComboStyleProps } from '../../elements/combos';
-import type { CallableObject } from '../../types/callable';
-import type { NodeData } from '../data';
-import type { AnimationOptions } from './animation';
-import type { BaseElementStyle } from './base';
+import type { Graph } from '../../runtime/graph';
+import type { ComboData } from '../data';
+import type { AnimationStage } from './animation';
 import type { PaletteOptions } from './palette';
 
 /**
@@ -13,23 +12,41 @@ import type { PaletteOptions } from './palette';
  */
 export interface ComboOptions {
   /**
-   * <zh/> Combo 样式
+   * <zh/> 组合类型
+   *
+   * <en/> Combo type
+   */
+  type?: string | ((this: Graph, datum: ComboData) => string);
+  /**
+   * <zh/> 组合样式
    *
    * <en/> Combo style
    */
-  style?: CallableObject<ComboStyle, NodeData>;
+  style?:
+    | ComboStyle
+    | ((this: Graph, data: ComboData) => ComboStyle)
+    | {
+        [K in keyof ComboStyle]: ComboStyle[K] | ((this: Graph, data: ComboData) => ComboStyle[K]);
+      };
   /**
-   * <zh/> Combo 状态样式
+   * <zh/> 组合状态样式
    *
    * <en/> Combo state style
    */
-  state?: Record<string, CallableObject<ComboStyle, NodeData>>;
+  state?: Record<
+    string,
+    | ComboStyle
+    | ((this: Graph, data: ComboData) => ComboStyle)
+    | {
+        [K in keyof ComboStyle]: ComboStyle[K] | ((this: Graph, data: ComboData) => ComboStyle[K]);
+      }
+  >;
   /**
-   * <zh/> Combo 动画
+   * <zh/> 组合动画
    *
    * <en/> Combo animation
    */
-  animation?: AnimationOptions;
+  animation?: false | Record<AnimationStage, false | string | AnimationOptions[]>;
   /**
    * <zh/> 色板
    *
@@ -41,11 +58,10 @@ export interface ComboOptions {
 export interface StaticComboOptions {
   style?: ComboStyle;
   state?: Record<string, ComboStyle>;
-  animation?: AnimationOptions;
+  animation?: false | Record<AnimationStage, false | string | AnimationOptions[]>;
   palette?: PaletteOptions;
 }
 
-export interface ComboStyle extends BaseElementStyle, Partial<BaseComboStyleProps> {
-  children?: ID[];
+export interface ComboStyle extends Partial<BaseComboStyleProps> {
   [key: string]: any;
 }

@@ -1,5 +1,5 @@
-import { Graph } from '@/src';
 import { idOf } from '@/src/utils/id';
+import { Graph } from '@antv/g6';
 
 export const elementEdgeLoopPolyline: TestCase = async (context) => {
   const data = {
@@ -78,8 +78,8 @@ export const elementEdgeLoopPolyline: TestCase = async (context) => {
     ...context,
     data,
     node: {
+      type: 'rect',
       style: {
-        type: 'rect',
         size: [80, 30],
         port: (d) => idOf(d).toString().includes('ports'),
         portR: 3,
@@ -96,8 +96,8 @@ export const elementEdgeLoopPolyline: TestCase = async (context) => {
       },
     },
     edge: {
+      type: 'polyline',
       style: {
-        type: 'polyline',
         endArrow: true,
         loopPlacement: (d) => d.style!.placement,
       },

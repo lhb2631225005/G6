@@ -1,7 +1,6 @@
 import { AABB } from '@antv/g';
 import { clone } from '@antv/util';
-import type { TriangleDirection } from '../elements/nodes/triangle';
-import type { Node, Padding, Point } from '../types';
+import type { Node, Padding, Point, TriangleDirection } from '../types';
 import { isPoint } from './is';
 import { isBetween } from './math';
 import { parsePadding } from './padding';
@@ -46,7 +45,7 @@ export function getBBoxSize(bbox: AABB): [number, number] {
  * @returns <zh/> 包围盒 | <en/> bounding box
  */
 export function getNodeBBox(node: Point | Node, padding?: Padding): AABB {
-  const bbox = isPoint(node) ? getPointBBox(node) : node.getKey().getBounds();
+  const bbox = isPoint(node) ? getPointBBox(node) : node.getShape('key').getBounds();
   return padding ? getExpandedBBox(bbox, padding) : bbox;
 }
 
@@ -107,6 +106,23 @@ export function getCombinedBBox(bboxes: AABB[]): AABB {
 }
 
 /**
+ * <zh/> 判断 bbox1 是否完全包含在 bbox2 内
+ *
+ * <en/> Determine whether bbox1 is completely contained in bbox2
+ * @param bbox1 - <zh/> 目标包围盒 | <en/> Target bounding box
+ * @param bbox2 - <zh/> 参考包围盒 | <en/> Reference bounding box
+ * @returns <zh/> 如果 bbox1 完全包含在 bbox2 内返回 true，否则返回 false | <en/> Returns true if bbox1 is completely contained in bbox2, false otherwise
+ */
+export function isBBoxInside(bbox1: AABB, bbox2: AABB): boolean {
+  const [minX1, minY1] = bbox1.min;
+  const [maxX1, maxY1] = bbox1.max;
+  const [minX2, minY2] = bbox2.min;
+  const [maxX2, maxY2] = bbox2.max;
+
+  return minX1 >= minX2 && maxX1 <= maxX2 && minY1 >= minY2 && maxY1 <= maxY2;
+}
+
+/**
  * <zh/> 判断点是否在给定的包围盒内
  *
  * <en/> Whether the point is contained in the given box
@@ -116,6 +132,27 @@ export function getCombinedBBox(bboxes: AABB[]): AABB {
  */
 export function isPointInBBox(point: Point, bbox: AABB) {
   return isBetween(point[0], bbox.min[0], bbox.max[0]) && isBetween(point[1], bbox.min[1], bbox.max[1]);
+}
+
+/**
+ * <zh/> 判断点是否在给定的包围盒的边界或边界的延长线上
+ *
+ * <en/> Whether the point is on the boundary or extension line of the given box
+ * @param point - <zh/> 点 | <en/> Point
+ * @param bbox - <zh/> 包围盒 | <en/> Bounding box
+ * @param extended - <zh/> 是否判断边界的延长线 | <en/> Whether to judge the extension line of the boundary
+ * @returns <zh/> 如果点在包围盒的边界或边界的延长线上返回 true，否则返回 false | <en/> Returns true if the point is on the boundary or extension line of the bounding box, false otherwise
+ */
+export function isPointOnBBoxBoundary(point: Point, bbox: AABB, extended = false): boolean {
+  const {
+    min: [minX, minY],
+    max: [maxX, maxY],
+  } = bbox;
+
+  const onTopOrBottomLine = (point[1] === minY || point[1] === maxY) && (extended || isBetween(point[0], minX, maxX));
+  const onLeftOrRightLine = (point[0] === minX || point[0] === maxX) && (extended || isBetween(point[1], minY, maxY));
+
+  return onTopOrBottomLine || onLeftOrRightLine;
 }
 
 /**
@@ -131,6 +168,19 @@ export function isPointOutsideBBox(point: Point, bbox: AABB) {
 }
 
 /**
+ * <zh/> 判断点是否位于包围盒中心
+ *
+ * <en/> When the point is at the center of the bounding box
+ * @param point - <zh/> 点 | <en/> Point
+ * @param bbox - <zh/> 包围盒 | <en/> Bounding box
+ * @returns <zh/> 如果点在包围盒中心返回 true，否则返回 false | <en/> Returns true if the point is at the center of the bounding box, false otherwise
+ */
+export function isPointBBoxCenter(point: Point, bbox: AABB) {
+  const { center } = bbox;
+  return point[0] === center[0] && point[1] === center[1];
+}
+
+/**
  * <zh/> 获取包围盒上离点 `p` 最近的边
  *
  * <en/> Get a side of the boundary which is nearest to the point `p`
@@ -138,7 +188,7 @@ export function isPointOutsideBBox(point: Point, bbox: AABB) {
  * @param p - <zh/> 点 | <en/> Point
  * @returns <zh/> 离点 `p` 最近的边 | <en/> The side nearest to the point `p`
  */
-export function getNearestSideToPoint(bbox: AABB, p: Point): 'left' | 'right' | 'top' | 'bottom' {
+export function getNearestBoundarySide(p: Point, bbox: AABB): 'left' | 'right' | 'top' | 'bottom' {
   const [x, y] = p;
   const [minX, minY] = bbox.min;
   const [maxX, maxY] = bbox.max;
@@ -151,17 +201,17 @@ export function getNearestSideToPoint(bbox: AABB, p: Point): 'left' | 'right' | 
 }
 
 /**
- * <zh/> 获取包围盒上离点 `p` 最近的点
+ * <zh/> 获取包围盒上离点 `p` 最近的边界点
  *
  * <en/> Get a point on the boundary nearest to the point `p`
  * @param bbox - <zh/> 包围盒 | <en/> Bounding box
  * @param p - <zh/> 点 | <en/> Point
  * @returns <zh/> 离点 `p` 最近的点 | <en/> The point nearest to the point `p`
  */
-export function getNearestPointToPoint(bbox: AABB, p: Point): Point {
+export function getNearestBoundaryPoint(p: Point, bbox: AABB): Point {
   const ref = clone(p);
   if (isPointInBBox(p, bbox)) {
-    const side = getNearestSideToPoint(bbox, p);
+    const side = getNearestBoundarySide(p, bbox);
     switch (side) {
       case 'left':
         ref[0] = bbox.min[0];
@@ -226,4 +276,28 @@ export function getIncircleRadius(bbox: AABB, direction: TriangleDirection): num
 
   // 三角形的内切圆半径
   return (h ** 2 - (Math.sqrt((w / 2) ** 2 + h ** 2) - w / 2) ** 2) / (2 * h);
+}
+
+/**
+ * <zh/> 获取包围盒的四条边，顺序依次为上、右、下、左
+ *
+ * <en/> Get the four segments of the bounding box, in order from top, right, bottom, left
+ * @param bbox - <zh/> 包围盒 | <en/> Bounding box
+ * @returns <zh/> 包围盒的四条边 | <en/> The four segments of the bounding box
+ */
+export function getBBoxSegments(bbox: AABB): [Point, Point][] {
+  const {
+    min: [minX, minY],
+    max: [maxX, maxY],
+  } = bbox;
+  const topLeftCorner: Point = [minX, maxY];
+  const topRightCorner: Point = [maxX, maxY];
+  const bottomRightCorner: Point = [maxX, minY];
+  const bottomLeftCorner: Point = [minX, minY];
+
+  const top = [topLeftCorner, topRightCorner];
+  const right = [topRightCorner, bottomRightCorner];
+  const bottom = [bottomRightCorner, bottomLeftCorner];
+  const left = [bottomLeftCorner, topLeftCorner];
+  return [top, right, bottom, left] as [Point, Point][];
 }

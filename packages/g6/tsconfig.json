@@ -6,9 +6,9 @@
     "outDir": "lib",
     "paths": {
       "@/*": ["./*"],
-      "@@/*": ["__tests__/*"]
-    },
-    "sourceRoot": "src"
+      "@@/*": ["__tests__/*"],
+      "@antv/g6": ["./src/index.ts"]
+    }
   },
   "exclude": ["node_modules", "dist", "lib", "esm"],
   "extends": "../../tsconfig.json",

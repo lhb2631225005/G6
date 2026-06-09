@@ -1,26 +1,34 @@
 import type EventEmitter from '@antv/event-emitter';
-import { getExtension } from '..';
+import type { Graph } from '../../runtime/graph';
 import type { RuntimeContext } from '../../runtime/types';
-import type { Listener } from '../../types';
+import type { IEvent } from '../../types';
 import { arrayDiff } from '../../utils/diff';
 import { parseExtensions } from '../../utils/extension';
-import type { ExtensionOptions, LooselyExtensionOption, STDExtensionOption } from './types';
+import { print } from '../../utils/print';
+import { getExtension } from '../get';
+import type { STDExtensionOption } from './types';
 
-export abstract class ExtensionController<Extension extends BaseExtension<LooselyExtensionOption>> {
+export abstract class ExtensionController<E extends BaseExtension<any>> {
   protected context: RuntimeContext;
 
   protected extensions: STDExtensionOption[] = [];
 
-  protected extensionMap: Record<string, Extension> = {};
+  protected extensionMap: Record<string, E> = {};
 
-  public abstract category: 'plugin' | 'behavior';
+  public abstract category: 'plugin' | 'behavior' | 'transform';
 
   constructor(context: RuntimeContext) {
     this.context = context;
   }
 
-  public setExtensions(extensions: ExtensionOptions) {
-    const stdExtensions = parseExtensions(this.category, extensions) as STDExtensionOption[];
+  public setExtensions(
+    extensions: (
+      | string
+      | { type: string; [keys: string]: unknown }
+      | ((this: Graph) => { type: string; [keys: string]: unknown })
+    )[],
+  ) {
+    const stdExtensions = parseExtensions(this.context.graph, this.category, extensions) as STDExtensionOption[];
     const { enter, update, exit, keep } = arrayDiff(this.extensions, stdExtensions, (extension) => extension.key);
 
     this.createExtensions(enter);
@@ -34,11 +42,12 @@ export abstract class ExtensionController<Extension extends BaseExtension<Loosel
     const { category } = this;
 
     const { key, type } = extension;
-    const Ctor = getExtension(category as any, type);
-    if (!Ctor) return;
+    const Ctor = getExtension(category, type);
+    if (!Ctor) return print.warn(`The extension ${type} of ${category} is not registered.`);
 
     const instance = new Ctor(this.context, extension);
-    this.extensionMap[key] = instance;
+    instance.initialized = true;
+    this.extensionMap[key] = instance as E;
   }
 
   protected createExtensions(extensions: STDExtensionOption[]) {
@@ -59,10 +68,13 @@ export abstract class ExtensionController<Extension extends BaseExtension<Loosel
 
   protected destroyExtension(key: string) {
     const instance = this.extensionMap[key];
-    if (instance) {
+
+    if (!instance) return;
+    if (instance.initialized && !instance.destroyed) {
       instance.destroy();
-      delete this.extensionMap[key];
     }
+
+    delete this.extensionMap[key];
   }
 
   protected destroyExtensions(extensions: STDExtensionOption[]) {
@@ -70,7 +82,7 @@ export abstract class ExtensionController<Extension extends BaseExtension<Loosel
   }
 
   public destroy() {
-    Object.values(this.extensionMap).forEach((extension) => extension.destroy());
+    this.destroyExtensions(this.extensions);
     // @ts-expect-error force delete
     this.context = {};
     this.extensions = [];
@@ -83,16 +95,18 @@ export abstract class ExtensionController<Extension extends BaseExtension<Loosel
  *
  * <en/> Base class for extension instance
  */
-export class BaseExtension<T extends LooselyExtensionOption> {
+export class BaseExtension<T extends { type: string; key?: string; [key: string]: unknown }> {
   protected context: RuntimeContext;
 
   protected options: Required<T>;
 
-  protected events: [EventEmitter | HTMLElement, string, Listener][] = [];
+  protected events: [EventEmitter | HTMLElement, string, (event: IEvent) => void][] = [];
+
+  public initialized = false;
 
   public destroyed = false;
 
-  constructor(context: RuntimeContext, options: T) {
+  constructor(context: RuntimeContext, options: Partial<T>) {
     this.context = context;
     this.options = options as Required<T>;
   }

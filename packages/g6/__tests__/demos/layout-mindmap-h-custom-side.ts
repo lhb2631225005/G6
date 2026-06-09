@@ -1,21 +1,23 @@
-import type { NodeData } from '@/src';
-import { Graph, Utils } from '@/src';
 import data from '@@/dataset/algorithm-category.json';
+import type { NodeData } from '@antv/g6';
+import { Graph, treeToGraphData } from '@antv/g6';
 
 export const layoutMindmapHCustomSide: TestCase = async (context) => {
   const graph = new Graph({
     ...context,
-    data: Utils.treeToGraphData(data),
+    data: treeToGraphData(data),
     autoFit: 'view',
     node: {
-      style: (model) => {
-        const x = +model.style!.x!;
+      style: function (this: Graph, model) {
+        const root = this.getNodeData().find((node) => node.depth === 0);
+        const rootX = Number(root?.style?.x ?? 0);
+        const x = Number(model.style?.x ?? 0) - rootX;
         return {
           labelText: model.id,
           size: 26,
-          labelPlacement: x > 0 ? 'right' : 'left',
+          labelPlacement: x >= 0 ? 'right' : 'left',
           labelMaxWidth: 200,
-          labelTextAlign: x > 0 ? 'start' : 'end',
+          labelTextAlign: x >= 0 ? 'start' : 'end',
           lineWidth: 1,
           stroke: '#5F95FF',
           fill: '#EFF4FF',
@@ -24,13 +26,12 @@ export const layoutMindmapHCustomSide: TestCase = async (context) => {
       },
     },
     edge: {
-      style: {
-        type: 'cubic-horizontal',
-      },
+      type: 'cubic-horizontal',
     },
     layout: {
       type: 'mindmap',
       direction: 'H',
+      preLayout: false,
       getHeight: () => {
         return 16;
       },

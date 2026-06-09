@@ -4,26 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>G6: Preview</title>
+    <script type="module">
+      import { iconfont } from '@/src';
+      const style = document.createElement('style');
+      style.innerHTML = `@import url('${iconfont.css}');`;
+      document.head.appendChild(style);
+    </script>
     <style>
       body {
         margin: 0;
         font-size: 14px;
         color: var(--text-color);
         background-color: var(--background-color);
-        background-image: linear-gradient(var(--stroke-color) 1px, transparent 1px),
+        background-image:
+          linear-gradient(var(--stroke-color) 1px, transparent 1px),
           linear-gradient(90deg, var(--stroke-color) 1px, transparent 1px);
         background-size: 25px 25px;
         transition: all 0.5s;
       }
 
-      #app {
-        display: flex;
-        flex-direction: row-reverse;
-        justify-content: flex-end;
-      }
-
       #panel {
         z-index: 1;
+        position: absolute;
+        right: 0;
       }
 
       #container {
@@ -49,9 +52,8 @@
   </head>
 
   <body style="font-family: Arial, Helvetica, sans-serif">
-    <div id="app">
-      <div id="panel"></div>
-    </div>
+    <div id="panel"></div>
+    <div id="app"></div>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

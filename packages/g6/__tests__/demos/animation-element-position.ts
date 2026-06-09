@@ -1,8 +1,8 @@
-import type { G6Spec } from '@/src';
-import { Graph } from '@/src';
+import type { GraphOptions } from '@antv/g6';
+import { Graph } from '@antv/g6';
 
 export const animationElementPosition: TestCase = async (context) => {
-  const options: G6Spec = {
+  const options: GraphOptions = {
     ...context,
     data: {
       nodes: [

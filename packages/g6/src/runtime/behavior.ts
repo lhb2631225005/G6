@@ -1,17 +1,24 @@
 import type { DisplayObject, FederatedPointerEvent, FederatedWheelEvent } from '@antv/g';
 import type { BaseBehavior } from '../behaviors/base-behavior';
-import { CanvasEvent, ContainerEvent } from '../constants';
+import { CommonEvent, ContainerEvent } from '../constants';
 import { ExtensionController } from '../registry/extension';
 import type { BehaviorOptions, CustomBehaviorOption } from '../spec/behavior';
 import type { Target } from '../types';
+import { isToBeDestroyed } from '../utils/element';
 import { eventTargetOf } from '../utils/event';
 import type { RuntimeContext } from './types';
 
 export class BehaviorController extends ExtensionController<BaseBehavior<CustomBehaviorOption>> {
-  /** <zh/> 当前事件的目标 | <en/> The current event target */
+  /**
+   * <zh/> 当前事件的目标
+   *
+   *  <en/> The current event target
+   */
   private currentTarget: Target | null = null;
 
-  public category: 'plugin' | 'behavior' = 'behavior';
+  private currentTargetType: string | null = null;
+
+  public category = 'behavior' as const;
 
   constructor(context: RuntimeContext) {
     super(context);
@@ -34,24 +41,24 @@ export class BehaviorController extends ExtensionController<BaseBehavior<CustomB
     const canvas = this.context.canvas.document;
     if (canvas) {
       [
-        CanvasEvent.CLICK,
-        CanvasEvent.DBLCLICK,
-        CanvasEvent.POINTER_OVER,
-        CanvasEvent.POINTER_LEAVE,
-        CanvasEvent.POINTER_ENTER,
-        CanvasEvent.POINTER_MOVE,
-        CanvasEvent.POINTER_OUT,
-        CanvasEvent.POINTER_DOWN,
-        CanvasEvent.POINTER_UP,
-        CanvasEvent.CONTEXT_MENU,
-        CanvasEvent.DRAG_START,
-        CanvasEvent.DRAG,
-        CanvasEvent.DRAG_END,
-        CanvasEvent.DRAG_ENTER,
-        CanvasEvent.DRAG_OVER,
-        CanvasEvent.DRAG_LEAVE,
-        CanvasEvent.DROP,
-        CanvasEvent.WHEEL,
+        CommonEvent.CLICK,
+        CommonEvent.DBLCLICK,
+        CommonEvent.POINTER_OVER,
+        CommonEvent.POINTER_LEAVE,
+        CommonEvent.POINTER_ENTER,
+        CommonEvent.POINTER_MOVE,
+        CommonEvent.POINTER_OUT,
+        CommonEvent.POINTER_DOWN,
+        CommonEvent.POINTER_UP,
+        CommonEvent.CONTEXT_MENU,
+        CommonEvent.DRAG_START,
+        CommonEvent.DRAG,
+        CommonEvent.DRAG_END,
+        CommonEvent.DRAG_ENTER,
+        CommonEvent.DRAG_OVER,
+        CommonEvent.DRAG_LEAVE,
+        CommonEvent.DROP,
+        CommonEvent.WHEEL,
       ].forEach((name) => {
         canvas.addEventListener(name, this.forwardCanvasEvents);
       });
@@ -59,49 +66,62 @@ export class BehaviorController extends ExtensionController<BaseBehavior<CustomB
   }
 
   private forwardCanvasEvents = (event: FederatedPointerEvent | FederatedWheelEvent) => {
-    const target = eventTargetOf(event.target as DisplayObject);
+    const { target: originalTarget } = event;
+    const target = eventTargetOf(originalTarget as DisplayObject);
     if (!target) return;
     const { graph, canvas } = this.context;
     const { type: targetType, element: targetElement } = target;
-    const { type, detail, button } = event;
-    const stdEvent = { ...event, target: targetElement, targetType };
+    // 即将销毁或已销毁的元素不再触发事件
+    // Elements that are about to be destroyed or have been destroyed no longer trigger events
+    if ('destroyed' in targetElement && (isToBeDestroyed(targetElement) || targetElement.destroyed)) return;
 
-    if (type === CanvasEvent.POINTER_MOVE) {
+    const { type, detail, button } = event;
+    const stdEvent = { ...event, target: targetElement, targetType, originalTarget };
+
+    if (type === CommonEvent.POINTER_MOVE) {
       if (this.currentTarget !== targetElement) {
         if (this.currentTarget) {
-          graph.emit(`${targetType}:${CanvasEvent.POINTER_LEAVE}`, { ...stdEvent, target: this.currentTarget });
+          graph.emit(`${this.currentTargetType}:${CommonEvent.POINTER_LEAVE}`, {
+            ...stdEvent,
+            type: CommonEvent.POINTER_LEAVE,
+            target: this.currentTarget,
+            targetType: this.currentTargetType,
+          });
         }
         if (targetElement) {
-          graph.emit(`${targetType}:${CanvasEvent.POINTER_ENTER}`, stdEvent);
+          Object.assign(stdEvent, { type: CommonEvent.POINTER_ENTER });
+          graph.emit(`${targetType}:${CommonEvent.POINTER_ENTER}`, stdEvent);
         }
       }
       this.currentTarget = targetElement;
+      this.currentTargetType = targetType;
     }
 
     // 非右键点击事件 / Click event except right click
-    if (!(type === CanvasEvent.CLICK && button === 2)) {
+    if (!(type === CommonEvent.CLICK && button === 2)) {
       graph.emit(`${targetType}:${type}`, stdEvent);
       graph.emit(type, stdEvent);
     }
 
     // 双击事件 / Double click event
-    if (type === CanvasEvent.CLICK && detail === 2) {
-      graph.emit(`${targetType}:${CanvasEvent.DBLCLICK}`, stdEvent);
-      graph.emit(CanvasEvent.DBLCLICK, stdEvent);
+    if (type === CommonEvent.CLICK && detail === 2) {
+      Object.assign(stdEvent, { type: CommonEvent.DBLCLICK });
+      graph.emit(`${targetType}:${CommonEvent.DBLCLICK}`, stdEvent);
+      graph.emit(CommonEvent.DBLCLICK, stdEvent);
     }
 
     // 右键菜单 / Contextmenu
-    if (type === CanvasEvent.POINTER_DOWN && button === 2) {
-      const contextMenuEvent = {
-        ...stdEvent,
+    if (type === CommonEvent.POINTER_DOWN && button === 2) {
+      Object.assign(stdEvent, {
+        type: CommonEvent.CONTEXT_MENU,
         preventDefault: () => {
-          canvas.getContainer()?.addEventListener(CanvasEvent.CONTEXT_MENU, (e) => e.preventDefault(), {
+          canvas.getContainer()?.addEventListener(CommonEvent.CONTEXT_MENU, (e) => e.preventDefault(), {
             once: true,
           });
         },
-      };
-      graph.emit(`${targetType}:${CanvasEvent.CONTEXT_MENU}`, contextMenuEvent);
-      graph.emit(CanvasEvent.CONTEXT_MENU, contextMenuEvent);
+      });
+      graph.emit(`${targetType}:${CommonEvent.CONTEXT_MENU}`, stdEvent);
+      graph.emit(CommonEvent.CONTEXT_MENU, stdEvent);
     }
   };
 

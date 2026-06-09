@@ -1,5 +1,5 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/dagre-combo.json';
+import { Graph } from '@antv/g6';
 
 export const layoutAntVDagreFlowCombo: TestCase = async (context) => {
   const graph = new Graph({
@@ -7,8 +7,8 @@ export const layoutAntVDagreFlowCombo: TestCase = async (context) => {
     autoFit: 'view',
     data,
     node: {
+      type: 'rect',
       style: {
-        type: 'rect',
         size: [60, 30],
         radius: 8,
         labelText: (d) => d.id,
@@ -16,18 +16,18 @@ export const layoutAntVDagreFlowCombo: TestCase = async (context) => {
         ports: [{ placement: 'top' }, { placement: 'bottom' }],
       },
       palette: {
-        field: (d) => d.style?.parentId,
+        field: (d) => d.combo,
       },
     },
     edge: {
+      type: 'cubic-vertical',
       style: {
-        type: 'cubic-vertical',
         endArrow: true,
       },
     },
     combo: {
+      type: 'rect',
       style: {
-        type: 'rect',
         radius: 8,
         labelText: (d) => d.id,
         lineDash: 0,
@@ -40,7 +40,7 @@ export const layoutAntVDagreFlowCombo: TestCase = async (context) => {
       nodesep: 5,
       sortByCombo: true,
     },
-    behaviors: ['drag-element', 'drag-canvas', 'zoom-canvas'],
+    behaviors: ['drag-element', 'drag-canvas', 'zoom-canvas', 'collapse-expand'],
   });
 
   await graph.render();

@@ -1,5 +1,6 @@
-import type { ID } from '@antv/graphlib';
-import type { DataAdded, DataChange, DataRemoved, DataUpdated } from '../types';
+import { groupBy } from '@antv/util';
+import { ChangeType } from '../constants';
+import type { DataAdded, DataChange, DataChanges, DataRemoved, DataUpdated, ID } from '../types';
 import { idOf } from './id';
 
 /**
@@ -33,13 +34,18 @@ export function reduceDataChanges(changes: DataChange[]): DataChange[] {
       else if (results.Updated.has(id)) {
         const { original } = results.Updated.get(id)!;
         results.Updated.set(id, { type, value, original } as DataUpdated);
+      } else if (results.Removed.has(id)) {
+        // 如果存在 Removed，不做任何操作
+        // If there is a Removed operation, do nothing
       } else results.Updated.set(id, change);
     } else if (type === 'NodeRemoved' || type === 'EdgeRemoved' || type === 'ComboRemoved') {
       // 如果存在 Added 或者 Updated 的操作，删除 Removed 操作
       // If there is an Added or Updated operation, delete the Removed operation
-      if (results.Added.has(id) || results.Updated.has(id)) {
+      if (results.Added.has(id)) {
         results.Added.delete(id);
+      } else if (results.Updated.has(id)) {
         results.Updated.delete(id);
+        results.Removed.set(id, change);
       } else {
         results.Removed.set(id, change);
       }
@@ -53,4 +59,43 @@ export function reduceDataChanges(changes: DataChange[]): DataChange[] {
     ...Array.from(results.Updated.values()),
     ...Array.from(results.Removed.values()),
   ];
+}
+
+/**
+ * <zh/> 对数据操作进行分类
+ *
+ * <en/> Classify data changes
+ * @param changes - <zh/> 数据操作 | <en/> data changes
+ * @returns <zh/> 分类后的数据操作 | <en/> classified data changes
+ */
+export function groupByChangeType(changes: DataChange[]): DataChanges {
+  const {
+    NodeAdded = [],
+    NodeUpdated = [],
+    NodeRemoved = [],
+    EdgeAdded = [],
+    EdgeUpdated = [],
+    EdgeRemoved = [],
+    ComboAdded = [],
+    ComboUpdated = [],
+    ComboRemoved = [],
+  } = groupBy(changes, (change) => change.type) as unknown as Record<`${ChangeType}`, DataChange[]>;
+
+  return {
+    add: {
+      nodes: NodeAdded,
+      edges: EdgeAdded,
+      combos: ComboAdded,
+    },
+    update: {
+      nodes: NodeUpdated,
+      edges: EdgeUpdated,
+      combos: ComboUpdated,
+    },
+    remove: {
+      nodes: NodeRemoved,
+      edges: EdgeRemoved,
+      combos: ComboRemoved,
+    },
+  } as DataChanges;
 }

@@ -1,4 +1,4 @@
-import { Graph } from '@/src';
+import { Graph } from '@antv/g6';
 
 export const elementEdgePolylineAnimation: TestCase = async (context) => {
   const data = {
@@ -13,9 +13,7 @@ export const elementEdgePolylineAnimation: TestCase = async (context) => {
     ...context,
     data,
     edge: {
-      style: {
-        type: 'polyline',
-      },
+      type: 'polyline',
     },
     behaviors: [{ type: 'drag-element' }],
   });

@@ -1,5 +1,5 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/dagre.json';
+import { Graph } from '@antv/g6';
 
 export const layoutAntVDagreFlow: TestCase = async (context) => {
   const graph = new Graph({
@@ -7,27 +7,26 @@ export const layoutAntVDagreFlow: TestCase = async (context) => {
     autoFit: 'view',
     data,
     node: {
+      type: 'rect',
       style: {
-        type: 'rect',
         size: [60, 30],
         radius: 8,
+        labelFill: '#fff',
         labelPlacement: 'center',
         labelText: (d) => d.id,
       },
     },
     edge: {
+      type: 'polyline',
       style: {
-        type: 'polyline',
         radius: 20,
         endArrow: true,
         lineWidth: 2,
-        color: '#C2C8D5',
+        stroke: '#C2C8D5',
       },
     },
     layout: {
       type: 'antv-dagre',
-      nodesep: 100,
-      ranksep: 70,
       controlPoints: true,
     },
     behaviors: ['drag-element', 'drag-canvas', 'zoom-canvas'],

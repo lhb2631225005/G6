@@ -1,12 +1,12 @@
-import { Graph, Utils } from '@/src';
 import data from '@@/dataset/algorithm-category.json';
+import { Graph, treeToGraphData } from '@antv/g6';
 
 export const layoutCompactBoxBasic: TestCase = async (context) => {
   const graph = new Graph({
     ...context,
     autoFit: 'view',
-    data: Utils.treeToGraphData(data),
-    behaviors: ['drag-canvas', 'zoom-canvas', 'drag-element'],
+    data: treeToGraphData(data),
+    behaviors: ['drag-canvas', 'zoom-canvas', 'drag-element', 'collapse-expand'],
     node: {
       style: {
         labelText: (data) => data.id,
@@ -16,9 +16,7 @@ export const layoutCompactBoxBasic: TestCase = async (context) => {
       },
     },
     edge: {
-      style: {
-        type: 'cubic-horizontal',
-      },
+      type: 'cubic-horizontal',
     },
     layout: {
       type: 'compact-box',
@@ -36,7 +34,6 @@ export const layoutCompactBoxBasic: TestCase = async (context) => {
         return 100;
       },
     },
-    animation: false,
   });
 
   await graph.render();

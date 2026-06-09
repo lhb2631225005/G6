@@ -1,5 +1,5 @@
-import { Graph } from '@/src';
 import data from '@@/dataset/combo.json';
+import { Graph } from '@antv/g6';
 
 export const layoutComboCombined: TestCase = async (context) => {
   const graph = new Graph({
@@ -7,7 +7,9 @@ export const layoutComboCombined: TestCase = async (context) => {
     data,
     layout: {
       type: 'combo-combined',
-      comboPadding: 2,
+      comboPadding: 10,
+      nodeSpacing: 20,
+      comboSpacing: 80,
     },
     node: {
       style: {
@@ -19,6 +21,12 @@ export const layoutComboCombined: TestCase = async (context) => {
       style: (model) => {
         const { size, color } = model.data as { size: number; color: string };
         return { stroke: color || '#99ADD1', lineWidth: size || 1 };
+      },
+    },
+    combo: {
+      style: {
+        labelText: (d) => d.id,
+        padding: 10,
       },
     },
     behaviors: ['drag-element', 'drag-canvas', 'zoom-canvas'],

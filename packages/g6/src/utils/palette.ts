@@ -1,10 +1,11 @@
-import type { ID } from '@antv/graphlib';
-import { groupBy, isFunction, isNumber, isString } from '@antv/util';
+import { groupBy } from '@antv/util';
 import type { CategoricalPalette } from '../palettes/types';
-import { getExtension } from '../registry';
+import { getExtension } from '../registry/get';
 import type { PaletteOptions, STDPaletteOptions } from '../spec/element/palette';
+import type { ID } from '../types';
 import type { ElementData, ElementDatum } from '../types/data';
 import { idOf } from './id';
+import { format } from './print';
 
 /**
  * <zh/> 解析色板配置
@@ -43,7 +44,7 @@ export function parsePalette(palette?: PaletteOptions): STDPaletteOptions | unde
  * @param data - <zh/> 元素数据 | <en/> Element data
  * @param palette - <zh/> 色板配置 | <en/> PaletteOptions options
  * @returns <zh/> 元素颜色 | <en/> Element color
- * @description
+ * @remarks
  * <zh/> 返回值结果是一个以元素 id 为 key，颜色值为 value 的对象
  *
  * <en/> The return value is an object with element id as key and color value as value
@@ -54,21 +55,29 @@ export function assignColorByPalette(data: ElementData, palette?: STDPaletteOpti
   const { type, color: colorPalette, field, invert } = palette;
 
   const assignColor = (args: [ID, number][]): Record<ID, string> => {
-    const palette = isString(colorPalette) ? getExtension('palette', colorPalette) : colorPalette;
+    const palette = typeof colorPalette === 'string' ? getExtension('palette', colorPalette) : colorPalette;
 
-    if (isFunction(palette)) {
+    if (typeof palette === 'function') {
       // assign by continuous
-      return Object.fromEntries(args.map(([groupKey, value]) => [groupKey, palette(invert ? 1 - value : value)]));
+      const result: Record<ID, string> = {};
+      args.forEach(([id, value]) => {
+        result[id] = palette(invert ? 1 - value : value);
+      });
+      return result;
     } else if (Array.isArray(palette)) {
       // assign by discrete
       const colors = invert ? [...palette].reverse() : palette;
-      return Object.fromEntries(args.map(([id, index]) => [id, colors[index % palette.length]]));
+      const result: Record<ID, string> = {};
+      args.forEach(([id, index]) => {
+        result[id] = colors[index % palette.length];
+      });
+      return result;
     }
     return {};
   };
 
   const parseField = (field: STDPaletteOptions['field'], datum: ElementDatum) =>
-    isString(field) ? datum.data?.[field] : field?.(datum);
+    typeof field === 'string' ? datum.data?.[field] : field?.(datum);
 
   if (type === 'group') {
     const groupData = groupBy<ElementDatum>(data, (datum) => {
@@ -91,7 +100,7 @@ export function assignColorByPalette(data: ElementData, palette?: STDPaletteOpti
     const [min, max] = data.reduce(
       ([min, max], datum) => {
         const value = parseField(field, datum);
-        if (!isNumber(value)) throw new Error(`Palette field ${field} is not a number`);
+        if (typeof value !== 'number') throw new Error(format(`Palette field ${field} is not a number`));
         return [Math.min(min, value), Math.max(max, value)];
       },
       [Infinity, -Infinity],
@@ -112,7 +121,7 @@ export function assignColorByPalette(data: ElementData, palette?: STDPaletteOpti
  * @returns <zh/> 色板上具体颜色 | <en/> Specific color on the palette
  */
 export function getPaletteColors(colorPalette?: string | CategoricalPalette): CategoricalPalette | undefined {
-  const palette = isString(colorPalette) ? getExtension('palette', colorPalette) : colorPalette;
-  if (isFunction(palette)) return undefined;
+  const palette = typeof colorPalette === 'string' ? getExtension('palette', colorPalette) : colorPalette;
+  if (typeof palette === 'function') return undefined;
   return palette;
 }
